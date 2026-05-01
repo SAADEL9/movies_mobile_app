@@ -6,19 +6,22 @@ import android.content.pm.PackageManager;
 import android.net.Uri;
 import android.os.Bundle;
 import android.preference.PreferenceManager;
-import android.widget.Button;
 import android.widget.ImageView;
 import android.widget.TextView;
-import android.widget.Toast;
+import android.view.Menu;
+import android.view.MenuItem;
 import androidx.annotation.NonNull;
 import androidx.appcompat.app.AppCompatActivity;
+import androidx.appcompat.widget.Toolbar;
 import androidx.core.app.ActivityCompat;
 import com.bumptech.glide.Glide;
+import com.google.android.material.button.MaterialButton;
+import com.google.android.material.snackbar.Snackbar;
 import com.saad.moviessaad.R;
 import com.saad.moviessaad.api.ApiClient;
 import com.saad.moviessaad.api.ApiConstants;
 import com.saad.moviessaad.api.ApiService;
-import com.saad.moviessaad.model.Movie;
+import com.saad.moviessaad.data.SupabaseService;
 import com.saad.moviessaad.model.Video;
 import com.saad.moviessaad.model.VideoResponse;
 import com.google.android.gms.location.FusedLocationProviderClient;
@@ -42,11 +45,19 @@ public class MovieDetailActivity extends AppCompatActivity {
 
     private static final int LOCATION_PERMISSION_REQUEST_CODE = 1001;
 
-    private Movie movie;
+    private int movieId;
+    private String movieTitle;
+    private String posterPath;
+    private String backdropPath;
+    private String overview;
+    private String releaseDate;
+    private double rating;
     private MapView map = null;
     private MyLocationNewOverlay mLocationOverlay;
     private FusedLocationProviderClient fusedLocationClient;
     private String youtubeKey = null;
+    private boolean isBookmarked;
+    private String userId;
 
     @Override
     protected void onCreate(Bundle savedInstanceState) {
@@ -57,31 +68,36 @@ public class MovieDetailActivity extends AppCompatActivity {
         
         setContentView(R.layout.activity_movie_detail);
 
-        // Récupération des données du film
-        movie = (Movie) getIntent().getSerializableExtra("movie_data");
-        if (movie == null) {
+        SessionManager sessionManager = new SessionManager();
+        userId = sessionManager.getCurrentUserId();
+        if (userId == null) {
+            startActivity(new Intent(this, LoginActivity.class));
             finish();
             return;
         }
+        readIntentData();
 
-        // Initialisation des vues
-        ImageView posterImageView = findViewById(R.id.detail_poster);
+        Toolbar toolbar = findViewById(R.id.toolbar);
+        setSupportActionBar(toolbar);
+        toolbar.setNavigationOnClickListener(v -> finish());
+
         TextView titleTextView = findViewById(R.id.detail_title);
         TextView releaseDateTextView = findViewById(R.id.detail_release_date);
         TextView ratingTextView = findViewById(R.id.detail_rating);
         TextView overviewTextView = findViewById(R.id.detail_overview);
-        Button btnPlayTrailer = findViewById(R.id.btn_play_trailer);
+        MaterialButton btnPlayTrailer = findViewById(R.id.btn_play_trailer);
 
         // Affichage des informations
-        titleTextView.setText(movie.getTitle());
-        releaseDateTextView.setText("Date : " + movie.getReleaseDate());
-        ratingTextView.setText("Note : " + movie.getVoteAverage() + "/10");
-        overviewTextView.setText(movie.getOverview());
+        titleTextView.setText(movieTitle);
+        releaseDateTextView.setText(getString(R.string.release_format, releaseDate));
+        ratingTextView.setText(getString(R.string.rating_format, rating));
+        overviewTextView.setText(overview);
 
+        ImageView backdropImage = findViewById(R.id.detail_backdrop);
         Glide.with(this)
-                .load(ApiConstants.IMAGE_BASE_URL + movie.getPosterPath())
+                .load(ApiConstants.IMAGE_BASE_URL + ((backdropPath != null && !backdropPath.isEmpty()) ? backdropPath : posterPath))
                 .placeholder(android.R.drawable.ic_menu_gallery)
-                .into(posterImageView);
+                .into(backdropImage);
 
         // Initialisation de la carte OpenStreetMap
         map = findViewById(R.id.map);
@@ -103,9 +119,94 @@ public class MovieDetailActivity extends AppCompatActivity {
                 Intent intent = new Intent(Intent.ACTION_VIEW, Uri.parse("https://www.youtube.com/watch?v=" + youtubeKey));
                 startActivity(intent);
             } else {
-                Toast.makeText(this, "Bande-annonce non disponible", Toast.LENGTH_SHORT).show();
+                showSnack("Trailer unavailable", R.color.colorMuted);
             }
         });
+        checkWatchlistStatus();
+    }
+
+    private void readIntentData() {
+        Intent intent = getIntent();
+        movieId = intent.getIntExtra("movie_id", -1);
+        movieTitle = intent.getStringExtra("movie_title");
+        posterPath = intent.getStringExtra("movie_poster");
+        rating = intent.getDoubleExtra("movie_rating", 0.0);
+        overview = intent.getStringExtra("movie_overview");
+        releaseDate = intent.getStringExtra("movie_release");
+        backdropPath = intent.getStringExtra("movie_backdrop");
+        if (movieTitle == null) movieTitle = "Unknown";
+        if (posterPath == null) posterPath = "";
+        if (overview == null || overview.isEmpty()) overview = "No overview available.";
+        if (releaseDate == null) releaseDate = "N/A";
+    }
+
+    @Override
+    public boolean onCreateOptionsMenu(Menu menu) {
+        getMenuInflater().inflate(R.menu.menu_movie_detail, menu);
+        updateBookmarkIcon(menu.findItem(R.id.action_bookmark));
+        return true;
+    }
+
+    @Override
+    public boolean onOptionsItemSelected(@NonNull MenuItem item) {
+        if (item.getItemId() == R.id.action_bookmark) {
+            toggleBookmark(item);
+            return true;
+        }
+        return super.onOptionsItemSelected(item);
+    }
+
+    private void checkWatchlistStatus() {
+        SupabaseService.INSTANCE.isMovieInWatchlist(userId, movieId, new SupabaseService.WatchlistStatusCallback() {
+            @Override
+            public void onSuccess(boolean isInWatchlist) {
+                isBookmarked = isInWatchlist;
+                invalidateOptionsMenu();
+            }
+
+            @Override
+            public void onError(String message) {
+                showSnack("Unable to sync watchlist", R.color.colorError);
+            }
+        });
+    }
+
+    private void toggleBookmark(MenuItem item) {
+        if (isBookmarked) {
+            SupabaseService.INSTANCE.removeWatchlistItem(userId, movieId, new SupabaseService.ActionCallback() {
+                @Override
+                public void onSuccess() {
+                        isBookmarked = false;
+                        updateBookmarkIcon(item);
+                        showSnack("Removed from Watchlist", R.color.colorMuted);
+                }
+
+                @Override
+                public void onError(String message) {
+                    showSnack("Error: " + message, R.color.colorError);
+                }
+            });
+            return;
+        }
+        SupabaseService.INSTANCE.upsertWatchlistItem(userId, movieId, movieTitle, posterPath, rating, new SupabaseService.ActionCallback() {
+            @Override
+            public void onSuccess() {
+                    isBookmarked = true;
+                    updateBookmarkIcon(item);
+                    showSnack("✓ Added to Watchlist", R.color.colorSuccess);
+            }
+
+            @Override
+            public void onError(String message) {
+                showSnack("Error: " + message, R.color.colorError);
+            }
+        });
+    }
+
+    private void updateBookmarkIcon(MenuItem item) {
+        if (item != null) {
+            item.setIcon(isBookmarked ? android.R.drawable.btn_star_big_on : android.R.drawable.btn_star_big_off);
+        }
     }
 
     /**
@@ -171,7 +272,7 @@ public class MovieDetailActivity extends AppCompatActivity {
      */
     private void fetchMovieTrailer() {
         ApiService apiService = ApiClient.getClient().create(ApiService.class);
-        apiService.getMovieVideos(movie.getId(), ApiConstants.API_KEY).enqueue(new Callback<VideoResponse>() {
+        apiService.getMovieVideos(movieId, ApiConstants.API_KEY).enqueue(new Callback<VideoResponse>() {
             @Override
             public void onResponse(Call<VideoResponse> call, Response<VideoResponse> response) {
                 if (response.isSuccessful() && response.body() != null) {
@@ -188,6 +289,14 @@ public class MovieDetailActivity extends AppCompatActivity {
             @Override
             public void onFailure(Call<VideoResponse> call, Throwable t) {}
         });
+    }
+
+    private void showSnack(String message, int actionColorRes) {
+        Snackbar snackbar = Snackbar.make(findViewById(android.R.id.content), message, Snackbar.LENGTH_SHORT);
+        snackbar.setBackgroundTint(getColor(R.color.colorSurface));
+        snackbar.setTextColor(getColor(R.color.colorTextPrimary));
+        snackbar.setActionTextColor(getColor(actionColorRes));
+        snackbar.show();
     }
 
     @Override
@@ -211,7 +320,7 @@ public class MovieDetailActivity extends AppCompatActivity {
             if (grantResults.length > 0 && grantResults[0] == PackageManager.PERMISSION_GRANTED) {
                 checkLocationPermission();
             } else {
-                Toast.makeText(this, "Permission refusée", Toast.LENGTH_SHORT).show();
+                showSnack("Location permission denied", R.color.colorError);
             }
         }
     }

@@ -12,21 +12,41 @@
         android:layout_height="wrap_content"
         android:orientation="vertical">
 
-        <ImageView
-            android:id="@+id/detail_poster"
+        <FrameLayout
             android:layout_width="match_parent"
-            android:layout_height="400dp"
-            android:scaleType="centerCrop"
-            android:contentDescription="@string/app_name" />
+            android:layout_height="300dp">
 
-        <TextView
-            android:id="@+id/detail_title"
-            android:layout_width="match_parent"
-            android:layout_height="wrap_content"
-            android:padding="16dp"
-            android:textSize="24sp"
-            android:textStyle="bold"
-            android:textColor="@android:color/black" />
+            <ImageView
+                android:id="@+id/detail_backdrop"
+                android:layout_width="match_parent"
+                android:layout_height="match_parent"
+                android:scaleType="centerCrop"
+                android:contentDescription="@string/app_name" />
+
+            <View
+                android:layout_width="match_parent"
+                android:layout_height="match_parent"
+                android:background="@drawable/gradient_overlay" />
+
+            <com.google.android.material.appbar.MaterialToolbar
+                android:id="@+id/toolbar"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:background="#66000000"
+                app:menu="@menu/menu_movie_detail"
+                app:navigationIcon="@android:drawable/ic_media_previous"
+                app:titleTextColor="@color/colorTextPrimary" />
+
+            <TextView
+                android:id="@+id/detail_title"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_gravity="bottom"
+                android:padding="16dp"
+                android:textSize="30sp"
+                android:textStyle="bold"
+                android:textColor="@color/colorTextPrimary" />
+        </FrameLayout>
 
         <LinearLayout
             android:layout_width="match_parent"
@@ -54,7 +74,7 @@
                 android:layout_width="wrap_content"
                 android:layout_height="wrap_content"
                 android:textSize="14sp"
-                android:textColor="@color/purple_700"
+            android:textColor="@color/colorAccent"
                 android:textStyle="bold" />
         </LinearLayout>
 
@@ -65,8 +85,8 @@
             android:layout_gravity="center"
             android:layout_margin="16dp"
             android:background="@drawable/rounded_button"
-            android:text="Voir la Bande-Annonce"
-            android:textColor="@android:color/white"
+            android:text="@string/watch_trailer"
+            android:textColor="@color/colorTextPrimary"
             android:paddingStart="24dp"
             android:paddingEnd="24dp" />
 
@@ -76,10 +96,10 @@
             android:paddingStart="16dp"
             android:paddingEnd="16dp"
             android:paddingTop="8dp"
-            android:text="Synopsis"
+            android:text="@string/overview"
             android:textStyle="bold"
             android:textSize="18sp"
-            android:textColor="@android:color/black" />
+            android:textColor="@color/colorTextPrimary" />
 
         <TextView
             android:id="@+id/detail_overview"
@@ -87,6 +107,7 @@
             android:layout_height="wrap_content"
             android:padding="16dp"
             android:textSize="16sp"
+            android:textColor="@color/colorTextSecondary"
             android:lineSpacingExtra="4dp" />
 
         <TextView
@@ -95,10 +116,10 @@
             android:paddingStart="16dp"
             android:paddingEnd="16dp"
             android:paddingTop="16dp"
-            android:text="Cinémas à proximité"
+            android:text="@string/nearby_cinemas"
             android:textStyle="bold"
             android:textSize="18sp"
-            android:textColor="@android:color/black" />
+            android:textColor="@color/colorTextPrimary" />
 
         <!-- OpenStreetMap View -->
         <org.osmdroid.views.MapView
