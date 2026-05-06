@@ -95,6 +95,12 @@ public class MainActivity extends AppCompatActivity implements MovieAdapter.OnMo
                 return true;
             }
         });
+
+        findViewById(R.id.fab_chat).setOnClickListener(v -> {
+            Intent intent = new Intent(this, ChatActivity.class);
+            intent.putExtra("mode", "general");
+            startActivity(intent);
+        });
     }
 
     @Override
@@ -141,6 +147,12 @@ public class MainActivity extends AppCompatActivity implements MovieAdapter.OnMo
             @Override
             public void onFailure(Call<MovieResponse> call, Throwable t) {
             }
+        });
+
+        findViewById(R.id.fab_chat).setOnClickListener(v -> {
+            Intent intent = new Intent(this, ChatActivity.class);
+            intent.putExtra("mode", "general");
+            startActivity(intent);
         });
     }
 

@@ -17,4 +17,5 @@
     <color name="colorRatingGold">#FFD700</color>
     <color name="colorSearchBar">#1E1E1E</color>
     <color name="colorDivider">#2A2A2A</color>
+    <color name="colorGold">#FFD700</color>
 </resources>

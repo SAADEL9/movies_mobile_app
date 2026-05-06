@@ -6,4 +6,9 @@
         android:icon="@android:drawable/btn_star_big_off"
         android:title="Bookmark"
         app:showAsAction="always" />
+    <item
+        android:id="@+id/action_chat"
+        android:icon="@drawable/ic_bot_star"
+        android:title="Ask AI"
+        app:showAsAction="always" />
 </menu>

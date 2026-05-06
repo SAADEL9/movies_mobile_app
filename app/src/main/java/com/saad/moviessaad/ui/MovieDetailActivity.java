@@ -145,8 +145,23 @@ public class MovieDetailActivity extends AppCompatActivity {
 
     @Override
     public boolean onCreateOptionsMenu(Menu menu) {
-        // No toolbar menu needed — heart button is inline in layout
+        getMenuInflater().inflate(R.menu.menu_movie_detail, menu);
         return true;
+    }
+
+    @Override
+    public boolean onOptionsItemSelected(MenuItem item) {
+        if (item.getItemId() == R.id.action_chat) {
+            Intent intent = new Intent(this, ChatActivity.class);
+            intent.putExtra("mode", "movie");
+            intent.putExtra("movie_title", movieTitle);
+            intent.putExtra("movie_overview", overview);
+            intent.putExtra("movie_year", releaseDate);
+            intent.putExtra("movie_rating", String.valueOf(rating));
+            startActivity(intent);
+            return true;
+        }
+        return super.onOptionsItemSelected(item);
     }
 
     private void updateHeartIcon() {
