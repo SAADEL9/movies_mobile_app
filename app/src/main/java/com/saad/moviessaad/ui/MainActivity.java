@@ -2,22 +2,19 @@ package com.saad.moviessaad.ui;
 
 import android.content.Intent;
 import android.os.Bundle;
-import android.view.MenuItem;
 import android.view.View;
 import android.widget.ProgressBar;
-import androidx.annotation.NonNull;
 import androidx.appcompat.app.AppCompatActivity;
 import androidx.appcompat.widget.SearchView;
-import androidx.appcompat.widget.Toolbar;
-import androidx.recyclerview.widget.LinearLayoutManager;
+import androidx.recyclerview.widget.GridLayoutManager;
 import androidx.recyclerview.widget.RecyclerView;
+import com.google.android.material.bottomnavigation.BottomNavigationView;
 import com.google.android.material.snackbar.Snackbar;
 import com.saad.moviessaad.R;
 import com.saad.moviessaad.adapter.MovieAdapter;
 import com.saad.moviessaad.api.ApiClient;
 import com.saad.moviessaad.api.ApiConstants;
 import com.saad.moviessaad.api.ApiService;
-import com.saad.moviessaad.data.SupabaseService;
 import com.saad.moviessaad.model.Movie;
 import com.saad.moviessaad.model.MovieResponse;
 import java.util.ArrayList;
@@ -48,19 +45,37 @@ public class MainActivity extends AppCompatActivity implements MovieAdapter.OnMo
         }
         setContentView(R.layout.activity_main);
 
-        Toolbar toolbar = findViewById(R.id.toolbar);
-        setSupportActionBar(toolbar);
-
         recyclerView = findViewById(R.id.recycler_view);
         progressBar = findViewById(R.id.progress_bar);
         SearchView searchView = findViewById(R.id.search_view);
 
-        recyclerView.setLayoutManager(new LinearLayoutManager(this));
+        // 2-column grid layout
+        recyclerView.setLayoutManager(new GridLayoutManager(this, 2));
         adapter = new MovieAdapter(movieList, this);
         recyclerView.setAdapter(adapter);
 
+        // Bottom navigation
+        BottomNavigationView bottomNav = findViewById(R.id.bottom_navigation);
+        bottomNav.setSelectedItemId(R.id.nav_home);
+        bottomNav.setOnItemSelectedListener(item -> {
+            int id = item.getItemId();
+            if (id == R.id.nav_home) {
+                return true;
+            } else if (id == R.id.nav_watchlist) {
+                startActivity(new Intent(this, WatchlistActivity.class));
+                overridePendingTransition(R.anim.fade_in, R.anim.fade_out);
+                return true;
+            } else if (id == R.id.nav_profile) {
+                startActivity(new Intent(this, ProfileActivity.class));
+                overridePendingTransition(R.anim.fade_in, R.anim.fade_out);
+                return true;
+            }
+            return false;
+        });
+
         apiService = ApiClient.getClient().create(ApiService.class);
         fetchNowPlayingMovies();
+
         searchView.setOnQueryTextListener(new SearchView.OnQueryTextListener() {
             @Override
             public boolean onQueryTextSubmit(String query) {
@@ -83,29 +98,13 @@ public class MainActivity extends AppCompatActivity implements MovieAdapter.OnMo
     }
 
     @Override
-    public boolean onOptionsItemSelected(@NonNull MenuItem item) {
-        int id = item.getItemId();
-        if (id == R.id.action_watchlist) {
-            startActivity(new Intent(this, WatchlistActivity.class));
-            return true;
+    protected void onResume() {
+        super.onResume();
+        // Reset bottom nav selection when returning
+        BottomNavigationView bottomNav = findViewById(R.id.bottom_navigation);
+        if (bottomNav != null) {
+            bottomNav.setSelectedItemId(R.id.nav_home);
         }
-        if (id == R.id.action_logout) {
-            SupabaseService.INSTANCE.signOut(new SupabaseService.ActionCallback() {
-                @Override
-                public void onSuccess() {
-                    Intent intent = new Intent(MainActivity.this, LoginActivity.class);
-                    intent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK | Intent.FLAG_ACTIVITY_CLEAR_TASK);
-                    startActivity(intent);
-                }
-
-                @Override
-                public void onError(String message) {
-                    showError("Unable to logout");
-                }
-            });
-            return true;
-        }
-        return super.onOptionsItemSelected(item);
     }
 
     private void fetchNowPlayingMovies() {
@@ -156,6 +155,7 @@ public class MainActivity extends AppCompatActivity implements MovieAdapter.OnMo
         intent.putExtra("movie_release", movie.getReleaseDate());
         intent.putExtra("movie_backdrop", movie.getBackdropPath());
         startActivity(intent);
+        overridePendingTransition(R.anim.slide_in_right, R.anim.slide_out_left);
     }
 
     private void showError(String message) {

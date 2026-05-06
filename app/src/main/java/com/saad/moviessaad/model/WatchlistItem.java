@@ -1,6 +1,7 @@
 package com.saad.moviessaad.model;
 
 public class WatchlistItem {
+    private long id;
     private int movieId;
     private String title;
     private String posterPath;
@@ -10,12 +11,17 @@ public class WatchlistItem {
     public WatchlistItem() {
     }
 
-    public WatchlistItem(int movieId, String title, String posterPath, double rating, String addedAt) {
+    public WatchlistItem(long id, int movieId, String title, String posterPath, double rating, String addedAt) {
+        this.id = id;
         this.movieId = movieId;
         this.title = title;
         this.posterPath = posterPath;
         this.rating = rating;
         this.addedAt = addedAt;
+    }
+
+    public long getId() {
+        return id;
     }
 
     public int getMovieId() {

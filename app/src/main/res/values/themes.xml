@@ -6,6 +6,9 @@
         <item name="colorSurface">@color/colorSurface</item>
         <item name="android:textColorPrimary">@color/colorTextPrimary</item>
         <item name="android:textColorSecondary">@color/colorTextSecondary</item>
+        <item name="android:statusBarColor">@color/colorBackground</item>
+        <item name="android:navigationBarColor">@color/colorBottomNav</item>
+        <item name="android:windowActivityTransitions">true</item>
     </style>
 
     <style name="Theme.MoviesSaad" parent="Base.Theme.MoviesSaad" />

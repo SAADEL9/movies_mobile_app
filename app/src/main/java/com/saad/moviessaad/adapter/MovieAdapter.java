@@ -13,6 +13,7 @@ import com.saad.moviessaad.R;
 import com.saad.moviessaad.api.ApiConstants;
 import com.saad.moviessaad.model.Movie;
 import java.util.List;
+import java.util.Locale;
 
 /**
  * Adaptateur professionnel pour la liste de films
@@ -57,17 +58,22 @@ public class MovieAdapter extends RecyclerView.Adapter<MovieAdapter.MovieViewHol
         private ImageView posterImageView;
         private TextView titleTextView;
         private TextView releaseDateTextView;
+        private TextView ratingTextView;
 
         public MovieViewHolder(@NonNull View itemView) {
             super(itemView);
             posterImageView = itemView.findViewById(R.id.movie_poster);
             titleTextView = itemView.findViewById(R.id.movie_title);
             releaseDateTextView = itemView.findViewById(R.id.movie_release_date);
+            ratingTextView = itemView.findViewById(R.id.movie_rating);
         }
 
         public void bind(final Movie movie, final OnMovieClickListener listener) {
             titleTextView.setText(movie.getTitle());
             releaseDateTextView.setText(movie.getReleaseDate());
+
+            // Display star rating badge
+            ratingTextView.setText(String.format(Locale.getDefault(), "⭐ %.1f", movie.getVoteAverage()));
 
             // Chargement Pro avec transition douce
             Glide.with(itemView.getContext())

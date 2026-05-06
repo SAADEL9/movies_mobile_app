@@ -58,6 +58,7 @@ public class MovieDetailActivity extends AppCompatActivity {
     private String youtubeKey = null;
     private boolean isBookmarked;
     private String userId;
+    private ImageView btnHeart;
 
     @Override
     protected void onCreate(Bundle savedInstanceState) {
@@ -65,7 +66,7 @@ public class MovieDetailActivity extends AppCompatActivity {
 
         // Initialisation de la configuration d'OSMdroid
         Configuration.getInstance().load(this, PreferenceManager.getDefaultSharedPreferences(this));
-        
+
         setContentView(R.layout.activity_movie_detail);
 
         SessionManager sessionManager = new SessionManager();
@@ -79,13 +80,17 @@ public class MovieDetailActivity extends AppCompatActivity {
 
         Toolbar toolbar = findViewById(R.id.toolbar);
         setSupportActionBar(toolbar);
-        toolbar.setNavigationOnClickListener(v -> finish());
+        toolbar.setNavigationOnClickListener(v -> {
+            finish();
+            overridePendingTransition(R.anim.slide_in_left, R.anim.slide_out_right);
+        });
 
         TextView titleTextView = findViewById(R.id.detail_title);
         TextView releaseDateTextView = findViewById(R.id.detail_release_date);
         TextView ratingTextView = findViewById(R.id.detail_rating);
         TextView overviewTextView = findViewById(R.id.detail_overview);
         MaterialButton btnPlayTrailer = findViewById(R.id.btn_play_trailer);
+        btnHeart = findViewById(R.id.btn_heart);
 
         // Affichage des informations
         titleTextView.setText(movieTitle);
@@ -106,14 +111,9 @@ public class MovieDetailActivity extends AppCompatActivity {
         map.getController().setZoom(15.0);
 
         fusedLocationClient = LocationServices.getFusedLocationProviderClient(this);
-
-        // Vérification des permissions
         checkLocationPermission();
-
-        // Récupération de la bande-annonce
         fetchMovieTrailer();
 
-        // Gestion du clic sur le bouton de bande-annonce
         btnPlayTrailer.setOnClickListener(v -> {
             if (youtubeKey != null) {
                 Intent intent = new Intent(Intent.ACTION_VIEW, Uri.parse("https://www.youtube.com/watch?v=" + youtubeKey));
@@ -122,6 +122,9 @@ public class MovieDetailActivity extends AppCompatActivity {
                 showSnack("Trailer unavailable", R.color.colorMuted);
             }
         });
+
+        btnHeart.setOnClickListener(v -> toggleBookmark());
+
         checkWatchlistStatus();
     }
 
@@ -142,18 +145,13 @@ public class MovieDetailActivity extends AppCompatActivity {
 
     @Override
     public boolean onCreateOptionsMenu(Menu menu) {
-        getMenuInflater().inflate(R.menu.menu_movie_detail, menu);
-        updateBookmarkIcon(menu.findItem(R.id.action_bookmark));
+        // No toolbar menu needed — heart button is inline in layout
         return true;
     }
 
-    @Override
-    public boolean onOptionsItemSelected(@NonNull MenuItem item) {
-        if (item.getItemId() == R.id.action_bookmark) {
-            toggleBookmark(item);
-            return true;
-        }
-        return super.onOptionsItemSelected(item);
+    private void updateHeartIcon() {
+        if (btnHeart == null) return;
+        btnHeart.setImageResource(isBookmarked ? R.drawable.ic_heart_filled : R.drawable.ic_heart_outline);
     }
 
     private void checkWatchlistStatus() {
@@ -161,7 +159,7 @@ public class MovieDetailActivity extends AppCompatActivity {
             @Override
             public void onSuccess(boolean isInWatchlist) {
                 isBookmarked = isInWatchlist;
-                invalidateOptionsMenu();
+                updateHeartIcon();
             }
 
             @Override
@@ -171,14 +169,14 @@ public class MovieDetailActivity extends AppCompatActivity {
         });
     }
 
-    private void toggleBookmark(MenuItem item) {
+    private void toggleBookmark() {
         if (isBookmarked) {
             SupabaseService.INSTANCE.removeWatchlistItem(userId, movieId, new SupabaseService.ActionCallback() {
                 @Override
                 public void onSuccess() {
-                        isBookmarked = false;
-                        updateBookmarkIcon(item);
-                        showSnack("Removed from Watchlist", R.color.colorMuted);
+                    isBookmarked = false;
+                    updateHeartIcon();
+                    showSnack("Removed from Watchlist", R.color.colorMuted);
                 }
 
                 @Override
@@ -191,9 +189,9 @@ public class MovieDetailActivity extends AppCompatActivity {
         SupabaseService.INSTANCE.upsertWatchlistItem(userId, movieId, movieTitle, posterPath, rating, new SupabaseService.ActionCallback() {
             @Override
             public void onSuccess() {
-                    isBookmarked = true;
-                    updateBookmarkIcon(item);
-                    showSnack("✓ Added to Watchlist", R.color.colorSuccess);
+                isBookmarked = true;
+                updateHeartIcon();
+                showSnack("✓ Added to Watchlist", R.color.colorSuccess);
             }
 
             @Override
@@ -201,12 +199,6 @@ public class MovieDetailActivity extends AppCompatActivity {
                 showSnack("Error: " + message, R.color.colorError);
             }
         });
-    }
-
-    private void updateBookmarkIcon(MenuItem item) {
-        if (item != null) {
-            item.setIcon(isBookmarked ? android.R.drawable.btn_star_big_on : android.R.drawable.btn_star_big_off);
-        }
     }
 
     /**
@@ -248,7 +240,6 @@ public class MovieDetailActivity extends AppCompatActivity {
 
     /**
      * Ajoute des marqueurs de cinémas autour de la position
-     * @param userPoint Position de l'utilisateur
      */
     private void addCinemaMarkers(GeoPoint userPoint) {
         addMarker(new GeoPoint(userPoint.getLatitude() + 0.005, userPoint.getLongitude() + 0.005), "Cinéma Royal");
@@ -323,5 +314,11 @@ public class MovieDetailActivity extends AppCompatActivity {
                 showSnack("Location permission denied", R.color.colorError);
             }
         }
+    }
+
+    @Override
+    public void onBackPressed() {
+        super.onBackPressed();
+        overridePendingTransition(R.anim.slide_in_left, R.anim.slide_out_right);
     }
 }

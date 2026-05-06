@@ -7,6 +7,7 @@ import io.github.jan.supabase.gotrue.auth
 import io.github.jan.supabase.gotrue.providers.builtin.Email
 import io.github.jan.supabase.postgrest.from
 import io.github.jan.supabase.postgrest.query.Order
+import io.github.jan.supabase.storage.storage
 import kotlinx.serialization.SerialName
 import kotlinx.serialization.Serializable
 import kotlinx.coroutines.CoroutineScope
@@ -14,6 +15,8 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.launch
 import org.json.JSONArray
+import org.json.JSONObject
+import io.ktor.http.ContentType
 import java.text.SimpleDateFormat
 import java.util.Date
 import java.util.Locale
@@ -35,6 +38,15 @@ data class UserEntry(
     val email: String
 )
 
+@Serializable
+data class ProfileEntry(
+    val id: String,
+    val username: String,
+    val email: String,
+    val bio: String = "",
+    @SerialName("avatar_url") val avatarUrl: String = ""
+)
+
 object SupabaseService {
 
     interface AuthCallback {
@@ -54,6 +66,16 @@ object SupabaseService {
 
     interface ActionCallback {
         fun onSuccess()
+        fun onError(message: String)
+    }
+
+    interface ProfileCallback {
+        fun onSuccess(username: String, email: String, bio: String, avatarUrl: String)
+        fun onError(message: String)
+    }
+
+    interface AvatarUploadCallback {
+        fun onSuccess(publicUrl: String)
         fun onError(message: String)
     }
 
@@ -119,6 +141,80 @@ object SupabaseService {
         }
     }
 
+    // ── Profile Methods ──────────────────────────────────────────────
+
+    fun loadProfile(userId: String, callback: ProfileCallback) {
+        ioScope.launch {
+            runCatching {
+                val response = SupabaseClientProvider.client.from("profiles").select {
+                    filter { eq("id", userId) }
+                }
+                val array = JSONArray(response.data.toString())
+                if (array.length() > 0) {
+                    val obj = array.getJSONObject(0)
+                    ProfileEntry(
+                        id = obj.optString("id"),
+                        username = obj.optString("username", ""),
+                        email = obj.optString("email", ""),
+                        bio = obj.optString("bio", ""),
+                        avatarUrl = obj.optString("avatar_url", "")
+                    )
+                } else {
+                    // Return empty profile if none exists
+                    val authEmail = SupabaseClientProvider.client.auth.currentUserOrNull()?.email ?: ""
+                    ProfileEntry(id = userId, username = "", email = authEmail, bio = "", avatarUrl = "")
+                }
+            }.onSuccess { profile ->
+                mainHandler.post {
+                    callback.onSuccess(profile.username, profile.email, profile.bio, profile.avatarUrl)
+                }
+            }.onFailure { error ->
+                mainHandler.post { callback.onError(error.message ?: "Failed to load profile") }
+            }
+        }
+    }
+
+    fun updateProfile(userId: String, username: String, email: String, bio: String, avatarUrl: String, callback: ActionCallback) {
+        ioScope.launch {
+            runCatching {
+                val entry = ProfileEntry(
+                    id = userId,
+                    username = username,
+                    email = email,
+                    bio = bio,
+                    avatarUrl = avatarUrl
+                )
+                SupabaseClientProvider.client.from("profiles").upsert(entry)
+            }.onSuccess {
+                mainHandler.post { callback.onSuccess() }
+            }.onFailure { error ->
+                postActionError(callback, error.message ?: "Failed to update profile")
+            }
+        }
+    }
+
+    fun uploadAvatar(userId: String, imageBytes: ByteArray, callback: AvatarUploadCallback) {
+        ioScope.launch {
+            runCatching {
+                val path = "$userId/avatar.jpg"
+                val bucket = SupabaseClientProvider.client.storage.from("avatars")
+                // Try to update first; if file doesn't exist, upload
+                try {
+                    bucket.update(path, imageBytes, true)
+                } catch (e: Exception) {
+                    bucket.upload(path, imageBytes, true)
+                }
+                bucket.publicUrl(path)
+            }.onSuccess { url ->
+                mainHandler.post { callback.onSuccess(url) }
+            }.onFailure { error ->
+                mainHandler.post { callback.onError(error.message ?: "Avatar upload failed") }
+            }
+        }
+    }
+
+    // ── Watchlist Methods ─────────────────────────────────────────────
+
     fun isMovieInWatchlist(userId: String, movieId: Int, callback: WatchlistStatusCallback) {
         ioScope.launch {
             runCatching {
@@ -183,6 +279,23 @@ object SupabaseService {
         }
     }
 
+    fun removeWatchlistItemById(id: Long, userId: String, callback: ActionCallback) {
+        ioScope.launch {
+            runCatching {
+                SupabaseClientProvider.client.from("watchlist").delete {
+                    filter {
+                        eq("id", id)
+                        eq("user_id", userId)
+                    }
+                }
+            }.onSuccess {
+                mainHandler.post { callback.onSuccess() }
+            }.onFailure { error ->
+                postActionError(callback, error.message ?: "Unable to remove watchlist item")
+            }
+        }
+    }
+
     fun loadWatchlist(userId: String, callback: WatchlistCallback) {
         ioScope.launch {
             runCatching {
@@ -206,6 +319,7 @@ object SupabaseService {
             val item = array.getJSONObject(index)
             result.add(
                 WatchlistItem(
+                    item.optLong("id"),
                     item.optInt("movie_id"),
                     item.optString("title"),
                     item.optString("poster_path"),

@@ -4,49 +4,68 @@
     xmlns:app="http://schemas.android.com/apk/res-auto"
     android:layout_width="match_parent"
     android:layout_height="wrap_content"
-    android:layout_margin="10dp"
-    app:cardCornerRadius="16dp"
-    app:cardElevation="6dp"
-    app:strokeWidth="0dp">
+    android:layout_margin="6dp"
+    app:cardBackgroundColor="@color/colorCardBackground"
+    app:cardCornerRadius="12dp"
+    app:cardElevation="4dp"
+    app:strokeWidth="0dp"
+    android:foreground="?attr/selectableItemBackground">
 
-    <RelativeLayout
+    <FrameLayout
         android:layout_width="match_parent"
-        android:layout_height="wrap_content"
-        android:background="#121212">
+        android:layout_height="wrap_content">
 
         <ImageView
             android:id="@+id/movie_poster"
             android:layout_width="match_parent"
-            android:layout_height="220dp"
+            android:layout_height="240dp"
             android:scaleType="centerCrop"
             android:contentDescription="@string/app_name" />
 
         <View
             android:layout_width="match_parent"
-            android:layout_height="80dp"
-            android:layout_alignBottom="@id/movie_poster"
+            android:layout_height="100dp"
+            android:layout_gravity="bottom"
             android:background="@drawable/gradient_overlay" />
 
+        <!-- Rating badge top-right -->
         <TextView
-            android:id="@+id/movie_title"
-            android:layout_width="match_parent"
-            android:layout_height="wrap_content"
-            android:layout_below="@id/movie_poster"
-            android:padding="12dp"
-            android:textColor="#FFFFFF"
-            android:textSize="18sp"
-            android:textStyle="bold" />
-
-        <TextView
-            android:id="@+id/movie_release_date"
+            android:id="@+id/movie_rating"
             android:layout_width="wrap_content"
             android:layout_height="wrap_content"
-            android:layout_below="@id/movie_title"
-            android:paddingStart="12dp"
-            android:paddingEnd="12dp"
-            android:paddingBottom="12dp"
-            android:textColor="#BBBBBB"
-            android:textSize="13sp" />
+            android:layout_gravity="top|end"
+            android:layout_margin="8dp"
+            android:background="@drawable/bg_rating_badge"
+            android:textColor="@color/colorRatingGold"
+            android:textSize="12sp"
+            android:textStyle="bold" />
 
-    </RelativeLayout>
+        <!-- Title + release overlaid at bottom -->
+        <LinearLayout
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_gravity="bottom"
+            android:orientation="vertical"
+            android:padding="10dp">
+
+            <TextView
+                android:id="@+id/movie_title"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:textColor="@color/colorTextPrimary"
+                android:textSize="14sp"
+                android:textStyle="bold"
+                android:maxLines="2"
+                android:ellipsize="end" />
+
+            <TextView
+                android:id="@+id/movie_release_date"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="2dp"
+                android:textColor="@color/colorTextMuted"
+                android:textSize="11sp" />
+        </LinearLayout>
+
+    </FrameLayout>
 </com.google.android.material.card.MaterialCardView>

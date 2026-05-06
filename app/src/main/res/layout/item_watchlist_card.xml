@@ -4,60 +4,64 @@
     xmlns:app="http://schemas.android.com/apk/res-auto"
     android:layout_width="match_parent"
     android:layout_height="wrap_content"
-    android:layout_marginHorizontal="12dp"
-    android:layout_marginVertical="8dp"
+    android:layout_margin="6dp"
     android:foreground="?attr/selectableItemBackground"
-    app:cardBackgroundColor="@color/colorSurface"
+    app:cardBackgroundColor="@color/colorCardBackground"
     app:cardCornerRadius="12dp"
-    app:cardElevation="4dp">
+    app:cardElevation="4dp"
+    app:strokeWidth="0dp">
 
-    <LinearLayout
+    <FrameLayout
         android:layout_width="match_parent"
-        android:layout_height="wrap_content"
-        android:orientation="horizontal"
-        android:padding="10dp">
+        android:layout_height="wrap_content">
 
         <ImageView
             android:id="@+id/watchlist_poster"
-            android:layout_width="90dp"
-            android:layout_height="130dp"
+            android:layout_width="match_parent"
+            android:layout_height="240dp"
             android:contentDescription="@string/app_name"
             android:scaleType="centerCrop" />
 
-        <LinearLayout
-            android:layout_width="0dp"
-            android:layout_height="match_parent"
-            android:layout_weight="1"
-            android:layout_marginStart="12dp"
-            android:orientation="vertical">
+        <View
+            android:layout_width="match_parent"
+            android:layout_height="100dp"
+            android:layout_gravity="bottom"
+            android:background="@drawable/gradient_overlay" />
 
-            <TextView
-                android:id="@+id/watchlist_title"
-                android:layout_width="match_parent"
-                android:layout_height="wrap_content"
-                android:textColor="@color/colorTextPrimary"
-                android:textStyle="bold"
-                android:textSize="19sp" />
+        <!-- Rating badge top-right -->
+        <TextView
+            android:id="@+id/watchlist_rating"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:layout_gravity="top|end"
+            android:layout_margin="8dp"
+            android:background="@drawable/bg_rating_badge"
+            android:textColor="@color/colorRatingGold"
+            android:textSize="12sp"
+            android:textStyle="bold" />
 
-            <TextView
-                android:id="@+id/watchlist_rating"
-                android:layout_width="wrap_content"
-                android:layout_height="wrap_content"
-                android:layout_marginTop="6dp"
-                android:textColor="@color/colorAccent"
-                android:textSize="14sp" />
+        <!-- Heart icon top-left -->
+        <ImageView
+            android:id="@+id/watchlist_heart"
+            android:layout_width="28dp"
+            android:layout_height="28dp"
+            android:layout_gravity="top|start"
+            android:layout_margin="8dp"
+            android:src="@drawable/ic_heart_filled"
+            android:contentDescription="Favorite" />
 
-            <com.google.android.material.button.MaterialButton
-                android:id="@+id/btn_remove"
-                android:layout_width="wrap_content"
-                android:layout_height="wrap_content"
-                android:layout_marginTop="14dp"
-                android:text="@string/remove"
-                android:textAllCaps="false"
-                android:textColor="@color/colorTextPrimary"
-                app:backgroundTint="@color/colorError" />
+        <!-- Title overlaid at bottom -->
+        <TextView
+            android:id="@+id/watchlist_title"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_gravity="bottom"
+            android:padding="10dp"
+            android:textColor="@color/colorTextPrimary"
+            android:textSize="14sp"
+            android:textStyle="bold"
+            android:maxLines="2"
+            android:ellipsize="end" />
 
-        </LinearLayout>
-
-    </LinearLayout>
+    </FrameLayout>
 </com.google.android.material.card.MaterialCardView>

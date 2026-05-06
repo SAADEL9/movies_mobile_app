@@ -8,7 +8,7 @@ import android.widget.TextView;
 import androidx.annotation.NonNull;
 import androidx.recyclerview.widget.RecyclerView;
 import com.bumptech.glide.Glide;
-import com.google.android.material.button.MaterialButton;
+import com.bumptech.glide.load.resource.drawable.DrawableTransitionOptions;
 import com.saad.moviessaad.R;
 import com.saad.moviessaad.api.ApiConstants;
 import com.saad.moviessaad.model.WatchlistItem;
@@ -51,6 +51,16 @@ public class WatchlistAdapter extends RecyclerView.Adapter<WatchlistAdapter.Watc
         return items.get(position);
     }
 
+    public void removeItem(int position) {
+        items.remove(position);
+        notifyItemRemoved(position);
+    }
+
+    public void insertItem(int position, WatchlistItem item) {
+        items.add(position, item);
+        notifyItemInserted(position);
+    }
+
     public void setItems(List<WatchlistItem> newItems) {
         items.clear();
         items.addAll(newItems);
@@ -61,25 +71,28 @@ public class WatchlistAdapter extends RecyclerView.Adapter<WatchlistAdapter.Watc
         private final ImageView poster;
         private final TextView title;
         private final TextView rating;
-        private final MaterialButton removeButton;
+        private final ImageView heart;
 
         WatchlistViewHolder(@NonNull View itemView) {
             super(itemView);
             poster = itemView.findViewById(R.id.watchlist_poster);
             title = itemView.findViewById(R.id.watchlist_title);
             rating = itemView.findViewById(R.id.watchlist_rating);
-            removeButton = itemView.findViewById(R.id.btn_remove);
+            heart = itemView.findViewById(R.id.watchlist_heart);
         }
 
         void bind(WatchlistItem item) {
             title.setText(item.getTitle());
-            rating.setText(String.format(Locale.getDefault(), "%.1f/10", item.getRating()));
+            rating.setText(String.format(Locale.getDefault(), "⭐ %.1f", item.getRating()));
+
             Glide.with(itemView.getContext())
                     .load(ApiConstants.IMAGE_BASE_URL + item.getPosterPath())
+                    .transition(DrawableTransitionOptions.withCrossFade())
                     .placeholder(android.R.color.darker_gray)
                     .into(poster);
+
             itemView.setOnClickListener(v -> listener.onMovieClick(item));
-            removeButton.setOnClickListener(v -> listener.onRemoveClick(item));
+            heart.setOnClickListener(v -> listener.onRemoveClick(item));
         }
     }
 }
