@@ -37,12 +37,8 @@ import com.google.android.material.chip.Chip;
 import com.google.android.material.chip.ChipGroup;
 import com.google.android.material.tabs.TabLayout;
 import com.saad.moviessaad.R;
-import com.saad.moviessaad.api.OllamaApiService;
-import com.saad.moviessaad.api.OllamaClient;
-import com.saad.moviessaad.api.OllamaConfig;
+import com.saad.moviessaad.api.MovieAiClient;
 import com.saad.moviessaad.api.OllamaMessage;
-import com.saad.moviessaad.api.OllamaRequest;
-import com.saad.moviessaad.api.OllamaResponse;
 import com.saad.moviessaad.model.ChatMessage;
 import java.util.ArrayList;
 import java.util.List;
@@ -50,9 +46,7 @@ import java.util.Locale;
 import io.github.sceneview.SceneView;
 import com.google.android.filament.gltfio.FilamentInstance;
 import io.github.sceneview.node.ModelNode;
-import retrofit2.Call;
-import retrofit2.Callback;
-import retrofit2.Response;
+import dev.romainguy.kotlin.math.Float3;
 
 public class AvatarChatActivity extends AppCompatActivity implements TextToSpeech.OnInitListener {
 
@@ -71,16 +65,18 @@ public class AvatarChatActivity extends AppCompatActivity implements TextToSpeec
     private RecyclerView recyclerView;
     private ChatAdapter adapter;
     private FrameLayout sceneContainer;
+    private View avatarFallbackView;
     private View listeningRing;
     private TextView subtitleView;
     private EditText messageInput;
     private ChipGroup starterChips;
     private View starterChipsScroll;
+    private View conversationPanel;
+    private View inputContainer;
     private TabLayout chatTabs;
     private final Handler handler = new Handler(Looper.getMainLooper());
     private final List<OllamaMessage> conversationHistory = new ArrayList<>();
     private final List<ChatMessage> chatMessages = new ArrayList<>();
-    private OllamaApiService apiService;
     private TextToSpeech textToSpeech;
     private SpeechRecognizer speechRecognizer;
     private ObjectAnimator listeningAnimator;
@@ -114,8 +110,9 @@ public class AvatarChatActivity extends AppCompatActivity implements TextToSpeec
         messageInput = findViewById(R.id.et_message);
         starterChips = findViewById(R.id.starter_chips);
         starterChipsScroll = findViewById(R.id.starter_chips_scroll);
+        conversationPanel = findViewById(R.id.conversation_panel);
+        inputContainer = findViewById(R.id.input_container);
         chatTabs = findViewById(R.id.chat_tabs);
-        apiService = OllamaClient.getApiService();
         if (canUseTextToSpeech()) {
             textToSpeech = new TextToSpeech(this, this);
         }
@@ -165,19 +162,28 @@ public class AvatarChatActivity extends AppCompatActivity implements TextToSpeec
     private void showChatTab() {
         recyclerView.setVisibility(View.VISIBLE);
         avatarStage.setVisibility(View.GONE);
+        conversationPanel.setVisibility(View.VISIBLE);
+        inputContainer.setVisibility(View.VISIBLE);
         subtitleView.setVisibility(View.GONE);
+        starterChipsScroll.setVisibility(chatMessages.isEmpty() ? View.VISIBLE : View.GONE);
     }
 
     private void showAvatarTab() {
         recyclerView.setVisibility(View.GONE);
         avatarStage.setVisibility(View.VISIBLE);
+        conversationPanel.setVisibility(View.VISIBLE);
+        inputContainer.setVisibility(View.VISIBLE); // Enable text and voice zone
         subtitleView.setVisibility(View.VISIBLE);
+        starterChipsScroll.setVisibility(View.GONE);
+        messageInput.clearFocus();
+        avatarStage.requestFocus();
     }
 
     private void setupSceneView() {
+        addAvatarFallback();
         if (!canUse3dAvatar()) {
             avatar3dEnabled = false;
-            addAvatarFallback();
+            avatarFallbackView.setVisibility(View.VISIBLE);
             return;
         }
 
@@ -186,8 +192,12 @@ public class AvatarChatActivity extends AppCompatActivity implements TextToSpeec
             sceneContainer.addView(sceneView, new FrameLayout.LayoutParams(
                     FrameLayout.LayoutParams.MATCH_PARENT,
                     FrameLayout.LayoutParams.MATCH_PARENT));
+            avatarFallbackView.setVisibility(View.GONE);
+            avatar3dEnabled = true;
         } catch (Throwable throwable) {
             sceneView = null;
+            avatar3dEnabled = false;
+            avatarFallbackView.setVisibility(View.VISIBLE);
             subtitleView.setText("CineBot is ready, but the 3D avatar could not start on this device.");
         }
     }
@@ -197,11 +207,11 @@ public class AvatarChatActivity extends AppCompatActivity implements TextToSpeec
             return false;
         }
 
-        return !isLikelyEmulator();
+        return true;
     }
 
     private boolean canUseTextToSpeech() {
-        return !isLikelyEmulator();
+        return true;
     }
 
     private boolean isLikelyEmulator() {
@@ -216,11 +226,14 @@ public class AvatarChatActivity extends AppCompatActivity implements TextToSpeec
     }
 
     private void addAvatarFallback() {
+        if (avatarFallbackView != null) return;
         FrameLayout fallbackLayout = new FrameLayout(this);
 
         ImageView avatarImage = new ImageView(this);
         avatarImage.setImageResource(R.drawable.avatar);
-        avatarImage.setScaleType(ImageView.ScaleType.CENTER_CROP);
+        avatarImage.setAdjustViewBounds(true);
+        avatarImage.setScaleType(ImageView.ScaleType.FIT_CENTER);
+        avatarImage.setBackgroundColor(ContextCompat.getColor(this, R.color.colorBackground));
         fallbackLayout.addView(avatarImage, new FrameLayout.LayoutParams(
                 FrameLayout.LayoutParams.MATCH_PARENT,
                 FrameLayout.LayoutParams.MATCH_PARENT));
@@ -238,6 +251,7 @@ public class AvatarChatActivity extends AppCompatActivity implements TextToSpeec
                 Gravity.BOTTOM);
         fallbackLayout.addView(label, labelParams);
 
+        avatarFallbackView = fallbackLayout;
         sceneContainer.addView(fallbackLayout, new FrameLayout.LayoutParams(
                 FrameLayout.LayoutParams.MATCH_PARENT,
                 FrameLayout.LayoutParams.MATCH_PARENT));
@@ -368,7 +382,14 @@ public class AvatarChatActivity extends AppCompatActivity implements TextToSpeec
             }
             FilamentInstance modelInstance = sceneView.getModelLoader()
                     .createModelInstance(assetName, resourceFileName -> null);
-            currentModelNode = new ModelNode(modelInstance, true, 1.8f, null);
+            
+            // Refactored scale and position to ensure the entire avatar is visible and centered.
+            // Using scale (0.7f) and moving it down (-0.8f) as per the updated plan.
+            currentModelNode = new ModelNode(modelInstance, true, 0.7f, new Float3(0.0f, -0.8f, 0.0f));
+            
+            // Rotate 180 degrees to face the user.
+            currentModelNode.setRotation(new Float3(0.0f, 180.0f, 0.0f));
+
             sceneView.addChildNode(currentModelNode);
         } catch (Throwable throwable) {
             subtitleView.setText("CineBot could not load " + assetName + ".");
@@ -422,31 +443,25 @@ public class AvatarChatActivity extends AppCompatActivity implements TextToSpeec
         adapter.notifyItemInserted(chatMessages.size() - 1);
         recyclerView.scrollToPosition(chatMessages.size() - 1);
 
-        OllamaRequest request = new OllamaRequest(OllamaConfig.MODEL, conversationHistory, false);
-        apiService.chat(request).enqueue(new Callback<OllamaResponse>() {
+        MovieAiClient.chat(conversationHistory, new MovieAiClient.ReplyCallback() {
             @Override
-            public void onResponse(Call<OllamaResponse> call, Response<OllamaResponse> response) {
+            public void onSuccess(OllamaMessage botMessage, String provider) {
                 waitingForOllama = false;
                 removeTypingIndicator();
-                if (response.isSuccessful() && response.body() != null && response.body().getMessage() != null) {
-                    OllamaMessage botMessage = response.body().getMessage();
-                    conversationHistory.add(botMessage);
-                    String answer = safeValue(botMessage.getContent(), "I received an empty response from Ollama.");
-                    chatMessages.add(new ChatMessage(answer, false));
-                    adapter.notifyItemInserted(chatMessages.size() - 1);
-                    recyclerView.scrollToPosition(chatMessages.size() - 1);
-                    subtitleView.setText(answer);
-                    speak(answer);
-                } else {
-                    showBotError("Sorry, I cannot reach Ollama right now. Make sure Ollama is running on your computer and the model is installed.");
-                }
+                conversationHistory.add(botMessage);
+                String answer = safeValue(botMessage.getContent(), "I received an empty response.");
+                chatMessages.add(new ChatMessage(answer, false));
+                adapter.notifyItemInserted(chatMessages.size() - 1);
+                recyclerView.scrollToPosition(chatMessages.size() - 1);
+                subtitleView.setText(answer);
+                speak(answer);
             }
 
             @Override
-            public void onFailure(Call<OllamaResponse> call, Throwable t) {
+            public void onError(String message) {
                 waitingForOllama = false;
                 removeTypingIndicator();
-                showBotError("Error: " + t.getMessage());
+                showBotError(message);
             }
         });
     }

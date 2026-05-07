@@ -12,18 +12,11 @@ import androidx.recyclerview.widget.RecyclerView;
 import com.google.android.material.chip.Chip;
 import com.google.android.material.chip.ChipGroup;
 import com.saad.moviessaad.R;
-import com.saad.moviessaad.api.OllamaApiService;
-import com.saad.moviessaad.api.OllamaClient;
-import com.saad.moviessaad.api.OllamaConfig;
+import com.saad.moviessaad.api.MovieAiClient;
 import com.saad.moviessaad.api.OllamaMessage;
-import com.saad.moviessaad.api.OllamaRequest;
-import com.saad.moviessaad.api.OllamaResponse;
 import com.saad.moviessaad.model.ChatMessage;
 import java.util.ArrayList;
 import java.util.List;
-import retrofit2.Call;
-import retrofit2.Callback;
-import retrofit2.Response;
 
 public class ChatActivity extends AppCompatActivity {
 
@@ -35,7 +28,6 @@ public class ChatActivity extends AppCompatActivity {
     private ChipGroup starterChips;
     private View starterChipsScroll;
     private String mode;
-    private OllamaApiService apiService;
 
     @Override
     protected void onCreate(Bundle savedInstanceState) {
@@ -57,8 +49,6 @@ public class ChatActivity extends AppCompatActivity {
         
         recyclerView.setLayoutManager(new LinearLayoutManager(this));
         recyclerView.setAdapter(adapter);
-
-        apiService = OllamaClient.getApiService();
 
         mode = getIntent().getStringExtra("mode");
         if (mode == null) mode = "general";
@@ -121,34 +111,32 @@ public class ChatActivity extends AppCompatActivity {
         adapter.notifyItemInserted(chatMessages.size() - 1);
         recyclerView.scrollToPosition(chatMessages.size() - 1);
 
-        OllamaRequest request = new OllamaRequest(OllamaConfig.MODEL, apiHistory, false);
-        apiService.chat(request).enqueue(new Callback<OllamaResponse>() {
+        MovieAiClient.chat(apiHistory, new MovieAiClient.ReplyCallback() {
             @Override
-            public void onResponse(Call<OllamaResponse> call, Response<OllamaResponse> response) {
-                // Remove typing indicator
-                chatMessages.remove(chatMessages.size() - 1);
-                adapter.notifyItemRemoved(chatMessages.size());
-
-                if (response.isSuccessful() && response.body() != null) {
-                    OllamaMessage botMsg = response.body().getMessage();
-                    apiHistory.add(botMsg);
-                    chatMessages.add(new ChatMessage(botMsg.getContent(), false));
-                } else {
-                    chatMessages.add(new ChatMessage("Sorry, I'm having trouble connecting to my brain (Ollama).", false));
-                }
+            public void onSuccess(OllamaMessage botMsg, String provider) {
+                removeTypingIndicator();
+                apiHistory.add(botMsg);
+                chatMessages.add(new ChatMessage(botMsg.getContent(), false));
                 adapter.notifyItemInserted(chatMessages.size() - 1);
                 recyclerView.scrollToPosition(chatMessages.size() - 1);
             }
 
             @Override
-            public void onFailure(Call<OllamaResponse> call, Throwable t) {
-                chatMessages.remove(chatMessages.size() - 1);
-                adapter.notifyItemRemoved(chatMessages.size());
-                chatMessages.add(new ChatMessage("Error: " + t.getMessage(), false));
+            public void onError(String message) {
+                removeTypingIndicator();
+                chatMessages.add(new ChatMessage(message, false));
                 adapter.notifyItemInserted(chatMessages.size() - 1);
                 recyclerView.scrollToPosition(chatMessages.size() - 1);
             }
         });
+    }
+
+    private void removeTypingIndicator() {
+        int lastIndex = chatMessages.size() - 1;
+        if (lastIndex >= 0 && chatMessages.get(lastIndex).isTyping()) {
+            chatMessages.remove(lastIndex);
+            adapter.notifyItemRemoved(lastIndex);
+        }
     }
 
     @Override
