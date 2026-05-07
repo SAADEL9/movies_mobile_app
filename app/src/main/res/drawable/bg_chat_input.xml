@@ -1,7 +1,8 @@
 <?xml version="1.0" encoding="utf-8"?>
 <shape xmlns:android="http://schemas.android.com/apk/res/android">
-    <solid android:color="#1C1C2E" />
-    <corners android:radius="24dp" />
+    <solid android:color="@color/colorSearchBar" />
+    <stroke android:width="1dp" android:color="@color/colorDivider" />
+    <corners android:radius="18dp" />
     <padding
         android:bottom="8dp"
         android:left="16dp"

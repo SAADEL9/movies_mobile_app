@@ -16,6 +16,7 @@ playServicesLocation = "21.3.0"
 supabase = "2.1.0"
 ktorAndroid = "2.3.7"
 coroutinesAndroid = "1.8.1"
+sceneview = "2.0.3"
 
 [libraries]
 junit = { group = "junit", name = "junit", version.ref = "junit" }
@@ -37,6 +38,7 @@ supabase-gotrue = { group = "io.github.jan-tennert.supabase", name = "gotrue-kt"
 ktor-client-android = { group = "io.ktor", name = "ktor-client-android", version.ref = "ktorAndroid" }
 coroutines-android = { group = "org.jetbrains.kotlinx", name = "kotlinx-coroutines-android", version.ref = "coroutinesAndroid" }
 kotlinx-serialization-json = { group = "org.jetbrains.kotlinx", name = "kotlinx-serialization-json", version.ref = "kotlinxSerialization" }
+sceneview = { group = "io.github.sceneview", name = "sceneview", version.ref = "sceneview" }
 
 [plugins]
 android-application = { id = "com.android.application", version.ref = "agp" }

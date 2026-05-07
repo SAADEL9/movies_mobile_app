@@ -152,7 +152,7 @@ public class MovieDetailActivity extends AppCompatActivity {
     @Override
     public boolean onOptionsItemSelected(MenuItem item) {
         if (item.getItemId() == R.id.action_chat) {
-            Intent intent = new Intent(this, ChatActivity.class);
+            Intent intent = new Intent(this, AvatarChatActivity.class);
             intent.putExtra("mode", "movie");
             intent.putExtra("movie_title", movieTitle);
             intent.putExtra("movie_overview", overview);

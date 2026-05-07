@@ -2,12 +2,16 @@ package com.saad.moviessaad.ui;
 
 import android.content.Intent;
 import android.os.Bundle;
+import android.view.inputmethod.InputMethodManager;
+import android.content.Context;
 import android.view.View;
+import android.view.WindowManager;
 import android.widget.ProgressBar;
 import androidx.appcompat.app.AppCompatActivity;
 import androidx.appcompat.widget.SearchView;
 import androidx.recyclerview.widget.GridLayoutManager;
 import androidx.recyclerview.widget.RecyclerView;
+import com.google.android.material.appbar.MaterialToolbar;
 import com.google.android.material.bottomnavigation.BottomNavigationView;
 import com.google.android.material.snackbar.Snackbar;
 import com.saad.moviessaad.R;
@@ -15,6 +19,7 @@ import com.saad.moviessaad.adapter.MovieAdapter;
 import com.saad.moviessaad.api.ApiClient;
 import com.saad.moviessaad.api.ApiConstants;
 import com.saad.moviessaad.api.ApiService;
+import com.saad.moviessaad.data.SupabaseService;
 import com.saad.moviessaad.model.Movie;
 import com.saad.moviessaad.model.MovieResponse;
 import java.util.ArrayList;
@@ -33,6 +38,8 @@ public class MainActivity extends AppCompatActivity implements MovieAdapter.OnMo
     private ProgressBar progressBar;
     private ApiService apiService;
     private List<Movie> movieList = new ArrayList<>();
+    private MaterialToolbar toolbar;
+    private String userId;
 
     @Override
     protected void onCreate(Bundle savedInstanceState) {
@@ -43,11 +50,16 @@ public class MainActivity extends AppCompatActivity implements MovieAdapter.OnMo
             finish();
             return;
         }
+        userId = sessionManager.getCurrentUserId();
         setContentView(R.layout.activity_main);
 
+        getWindow().setSoftInputMode(WindowManager.LayoutParams.SOFT_INPUT_STATE_ALWAYS_HIDDEN);
+        toolbar = findViewById(R.id.toolbar);
         recyclerView = findViewById(R.id.recycler_view);
         progressBar = findViewById(R.id.progress_bar);
         SearchView searchView = findViewById(R.id.search_view);
+        preventSearchKeyboardOnLaunch(searchView);
+        loadGreeting();
 
         // 2-column grid layout
         recyclerView.setLayoutManager(new GridLayoutManager(this, 2));
@@ -97,9 +109,39 @@ public class MainActivity extends AppCompatActivity implements MovieAdapter.OnMo
         });
 
         findViewById(R.id.fab_chat).setOnClickListener(v -> {
-            Intent intent = new Intent(this, ChatActivity.class);
+            Intent intent = new Intent(this, AvatarChatActivity.class);
             intent.putExtra("mode", "general");
             startActivity(intent);
+        });
+    }
+
+    private void preventSearchKeyboardOnLaunch(SearchView searchView) {
+        searchView.clearFocus();
+        recyclerView.requestFocus();
+        searchView.post(() -> {
+            searchView.clearFocus();
+            InputMethodManager imm = (InputMethodManager) getSystemService(Context.INPUT_METHOD_SERVICE);
+            if (imm != null) {
+                imm.hideSoftInputFromWindow(searchView.getWindowToken(), 0);
+            }
+        });
+    }
+
+    private void loadGreeting() {
+        if (toolbar == null || userId == null) return;
+        SupabaseService.INSTANCE.loadDisplayName(userId, new SupabaseService.DisplayNameCallback() {
+            @Override
+            public void onSuccess(String displayName) {
+                String name = displayName == null || displayName.trim().isEmpty()
+                        ? "Alex"
+                        : displayName.trim();
+                toolbar.setTitle("Hi, " + name);
+            }
+
+            @Override
+            public void onError(String message) {
+                toolbar.setTitle("Hi, Alex");
+            }
         });
     }
 
@@ -150,7 +192,7 @@ public class MainActivity extends AppCompatActivity implements MovieAdapter.OnMo
         });
 
         findViewById(R.id.fab_chat).setOnClickListener(v -> {
-            Intent intent = new Intent(this, ChatActivity.class);
+            Intent intent = new Intent(this, AvatarChatActivity.class);
             intent.putExtra("mode", "general");
             startActivity(intent);
         });

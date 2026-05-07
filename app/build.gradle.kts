@@ -54,6 +54,7 @@ dependencies {
     implementation(libs.ktor.client.android)
     implementation(libs.coroutines.android)
     implementation(libs.kotlinx.serialization.json)
+    implementation(libs.sceneview)
 
     testImplementation(libs.junit)
     androidTestImplementation(libs.ext.junit)

@@ -10,6 +10,7 @@ import androidx.appcompat.app.AppCompatActivity;
 import androidx.recyclerview.widget.GridLayoutManager;
 import androidx.recyclerview.widget.ItemTouchHelper;
 import androidx.recyclerview.widget.RecyclerView;
+import com.google.android.material.bottomnavigation.BottomNavigationView;
 import com.google.android.material.snackbar.Snackbar;
 import com.saad.moviessaad.R;
 import com.saad.moviessaad.adapter.WatchlistAdapter;
@@ -39,6 +40,7 @@ public class WatchlistActivity extends AppCompatActivity {
         RecyclerView recyclerView = findViewById(R.id.recycler_watchlist);
         progressBar = findViewById(R.id.progress_bar);
         emptyState = findViewById(R.id.empty_state);
+        setupBottomNavigation();
 
         adapter = new WatchlistAdapter(new WatchlistAdapter.OnWatchlistActionListener() {
             @Override
@@ -82,6 +84,37 @@ public class WatchlistActivity extends AppCompatActivity {
         itemTouchHelper.attachToRecyclerView(recyclerView);
 
         observeWatchlist();
+    }
+
+    private void setupBottomNavigation() {
+        BottomNavigationView bottomNav = findViewById(R.id.bottom_navigation);
+        bottomNav.setSelectedItemId(R.id.nav_watchlist);
+        bottomNav.setOnItemSelectedListener(item -> {
+            int id = item.getItemId();
+            if (id == R.id.nav_watchlist) {
+                return true;
+            } else if (id == R.id.nav_home) {
+                Intent intent = new Intent(this, MainActivity.class);
+                intent.addFlags(Intent.FLAG_ACTIVITY_CLEAR_TOP | Intent.FLAG_ACTIVITY_SINGLE_TOP);
+                startActivity(intent);
+                overridePendingTransition(R.anim.fade_in, R.anim.fade_out);
+                return true;
+            } else if (id == R.id.nav_profile) {
+                startActivity(new Intent(this, ProfileActivity.class));
+                overridePendingTransition(R.anim.fade_in, R.anim.fade_out);
+                return true;
+            }
+            return false;
+        });
+    }
+
+    @Override
+    protected void onResume() {
+        super.onResume();
+        BottomNavigationView bottomNav = findViewById(R.id.bottom_navigation);
+        if (bottomNav != null) {
+            bottomNav.setSelectedItemId(R.id.nav_watchlist);
+        }
     }
 
     private int findItemPosition(WatchlistItem item) {

@@ -74,6 +74,11 @@ object SupabaseService {
         fun onError(message: String)
     }
 
+    interface DisplayNameCallback {
+        fun onSuccess(displayName: String)
+        fun onError(message: String)
+    }
+
     interface AvatarUploadCallback {
         fun onSuccess(publicUrl: String)
         fun onError(message: String)
@@ -85,6 +90,35 @@ object SupabaseService {
     fun getCurrentUserId(): String? = SupabaseClientProvider.client.auth.currentUserOrNull()?.id
 
     fun isLoggedIn(): Boolean = getCurrentUserId() != null
+
+    fun loadDisplayName(userId: String, callback: DisplayNameCallback) {
+        ioScope.launch {
+            runCatching {
+                val profileResponse = SupabaseClientProvider.client.from("profiles").select {
+                    filter { eq("id", userId) }
+                }
+                val profiles = JSONArray(profileResponse.data.toString())
+                if (profiles.length() > 0) {
+                    val username = profiles.getJSONObject(0).optString("username", "")
+                    if (username.isNotBlank()) return@runCatching username
+                }
+
+                val userResponse = SupabaseClientProvider.client.from("users").select {
+                    filter { eq("id", userId) }
+                }
+                val users = JSONArray(userResponse.data.toString())
+                if (users.length() > 0) {
+                    users.getJSONObject(0).optString("username", "")
+                } else {
+                    ""
+                }
+            }.onSuccess { displayName ->
+                mainHandler.post { callback.onSuccess(displayName) }
+            }.onFailure { error ->
+                mainHandler.post { callback.onError(error.message ?: "Failed to load display name") }
+            }
+        }
+    }
 
     fun login(email: String, password: String, callback: AuthCallback) {
         ioScope.launch {
