@@ -13,6 +13,8 @@ import androidx.recyclerview.widget.GridLayoutManager;
 import androidx.recyclerview.widget.RecyclerView;
 import com.google.android.material.appbar.MaterialToolbar;
 import com.google.android.material.bottomnavigation.BottomNavigationView;
+import com.google.android.material.chip.Chip;
+import com.google.android.material.chip.ChipGroup;
 import com.google.android.material.snackbar.Snackbar;
 import com.saad.moviessaad.R;
 import com.saad.moviessaad.adapter.MovieAdapter;
@@ -24,6 +26,7 @@ import com.saad.moviessaad.model.Movie;
 import com.saad.moviessaad.model.MovieResponse;
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Locale;
 import retrofit2.Call;
 import retrofit2.Callback;
 import retrofit2.Response;
@@ -39,6 +42,8 @@ public class MainActivity extends AppCompatActivity implements MovieAdapter.OnMo
     private ApiService apiService;
     private List<Movie> movieList = new ArrayList<>();
     private MaterialToolbar toolbar;
+    private ChipGroup categoryChipGroup;
+    private ChipGroup topRatedChipGroup;
     private String userId;
 
     @Override
@@ -57,6 +62,8 @@ public class MainActivity extends AppCompatActivity implements MovieAdapter.OnMo
         toolbar = findViewById(R.id.toolbar);
         recyclerView = findViewById(R.id.recycler_view);
         progressBar = findViewById(R.id.progress_bar);
+        categoryChipGroup = findViewById(R.id.category_chip_group);
+        topRatedChipGroup = findViewById(R.id.top_rated_chip_group);
         SearchView searchView = findViewById(R.id.search_view);
         preventSearchKeyboardOnLaunch(searchView);
         loadGreeting();
@@ -86,22 +93,24 @@ public class MainActivity extends AppCompatActivity implements MovieAdapter.OnMo
         });
 
         apiService = ApiClient.getClient().create(ApiService.class);
+        setupDiscoveryControls();
         fetchNowPlayingMovies();
 
         searchView.setOnQueryTextListener(new SearchView.OnQueryTextListener() {
             @Override
             public boolean onQueryTextSubmit(String query) {
-                if (query != null && !query.isEmpty()) {
-                    searchMovies(query);
+                if (query != null && !query.trim().isEmpty()) {
+                    runSearch(query.trim());
                 }
                 return true;
             }
 
             @Override
             public boolean onQueryTextChange(String newText) {
-                if (newText != null && !newText.isEmpty()) {
-                    searchMovies(newText);
+                if (newText != null && !newText.trim().isEmpty()) {
+                    runSearch(newText.trim());
                 } else {
+                    clearDiscoveryChecks();
                     fetchNowPlayingMovies();
                 }
                 return true;
@@ -113,6 +122,39 @@ public class MainActivity extends AppCompatActivity implements MovieAdapter.OnMo
             intent.putExtra("mode", "general");
             startActivity(intent);
         });
+    }
+
+    private void setupDiscoveryControls() {
+        setCategoryChip(R.id.chip_action, 28);
+        setCategoryChip(R.id.chip_romance, 10749);
+        setCategoryChip(R.id.chip_comedy, 35);
+        setCategoryChip(R.id.chip_horror, 27);
+        setCategoryChip(R.id.chip_scifi, 878);
+        setCategoryChip(R.id.chip_animation, 16);
+
+        Chip topMovies = findViewById(R.id.chip_top_movies);
+        Chip topSeries = findViewById(R.id.chip_top_series);
+        topMovies.setOnClickListener(v -> {
+            categoryChipGroup.clearCheck();
+            fetchTopRatedMovies();
+        });
+        topSeries.setOnClickListener(v -> {
+            categoryChipGroup.clearCheck();
+            fetchTopRatedSeries();
+        });
+    }
+
+    private void setCategoryChip(int chipId, int genreId) {
+        Chip chip = findViewById(chipId);
+        chip.setOnClickListener(v -> {
+            topRatedChipGroup.clearCheck();
+            fetchMoviesByGenre(chip.getText().toString(), genreId);
+        });
+    }
+
+    private void clearDiscoveryChecks() {
+        if (categoryChipGroup != null) categoryChipGroup.clearCheck();
+        if (topRatedChipGroup != null) topRatedChipGroup.clearCheck();
     }
 
     private void preventSearchKeyboardOnLaunch(SearchView searchView) {
@@ -162,8 +204,9 @@ public class MainActivity extends AppCompatActivity implements MovieAdapter.OnMo
             public void onResponse(Call<MovieResponse> call, Response<MovieResponse> response) {
                 progressBar.setVisibility(View.GONE);
                 if (response.isSuccessful() && response.body() != null) {
-                    movieList = response.body().getResults();
+                    movieList = normalizedResults(response.body().getResults(), "movie");
                     adapter.setMovieList(movieList);
+                    toolbar.setSubtitle("Let's find something great to watch.");
                 } else {
                     showError("Error while fetching movies");
                 }
@@ -177,12 +220,78 @@ public class MainActivity extends AppCompatActivity implements MovieAdapter.OnMo
         });
     }
 
+    private void fetchMoviesByGenre(String genreName, int genreId) {
+        progressBar.setVisibility(View.VISIBLE);
+        apiService.discoverMoviesByGenre(ApiConstants.API_KEY, genreId, "popularity.desc").enqueue(new Callback<MovieResponse>() {
+            @Override
+            public void onResponse(Call<MovieResponse> call, Response<MovieResponse> response) {
+                progressBar.setVisibility(View.GONE);
+                if (response.isSuccessful() && response.body() != null) {
+                    movieList = normalizedResults(response.body().getResults(), "movie");
+                    adapter.setMovieList(movieList);
+                    toolbar.setSubtitle(genreName + " movies");
+                } else {
+                    showError("Error while fetching " + genreName + " movies");
+                }
+            }
+
+            @Override
+            public void onFailure(Call<MovieResponse> call, Throwable t) {
+                progressBar.setVisibility(View.GONE);
+                showError("Network error: " + t.getMessage());
+            }
+        });
+    }
+
+    private void fetchTopRatedMovies() {
+        fetchRankedList(apiService.getTopRatedMovies(ApiConstants.API_KEY), "movie", "Best movies by rating");
+    }
+
+    private void fetchTopRatedSeries() {
+        fetchRankedList(apiService.getTopRatedSeries(ApiConstants.API_KEY), "tv", "Best series by rating");
+    }
+
+    private void fetchRankedList(Call<MovieResponse> call, String mediaType, String subtitle) {
+        progressBar.setVisibility(View.VISIBLE);
+        call.enqueue(new Callback<MovieResponse>() {
+            @Override
+            public void onResponse(Call<MovieResponse> call, Response<MovieResponse> response) {
+                progressBar.setVisibility(View.GONE);
+                if (response.isSuccessful() && response.body() != null) {
+                    movieList = normalizedResults(response.body().getResults(), mediaType);
+                    adapter.setMovieList(movieList);
+                    toolbar.setSubtitle(subtitle);
+                } else {
+                    showError("Error while fetching top rated titles");
+                }
+            }
+
+            @Override
+            public void onFailure(Call<MovieResponse> call, Throwable t) {
+                progressBar.setVisibility(View.GONE);
+                showError("Network error: " + t.getMessage());
+            }
+        });
+    }
+
+    private void runSearch(String query) {
+        int genreId = genreIdForQuery(query);
+        if (genreId != -1) {
+            topRatedChipGroup.clearCheck();
+            fetchMoviesByGenre(displayGenreName(query), genreId);
+            return;
+        }
+        clearDiscoveryChecks();
+        searchMovies(query);
+    }
+
     private void searchMovies(String query) {
         apiService.searchMovies(ApiConstants.API_KEY, query).enqueue(new Callback<MovieResponse>() {
             @Override
             public void onResponse(Call<MovieResponse> call, Response<MovieResponse> response) {
                 if (response.isSuccessful() && response.body() != null) {
-                    adapter.setMovieList(response.body().getResults());
+                    adapter.setMovieList(normalizedResults(response.body().getResults(), "movie"));
+                    toolbar.setSubtitle("Search results for \"" + query + "\"");
                 }
             }
 
@@ -190,12 +299,43 @@ public class MainActivity extends AppCompatActivity implements MovieAdapter.OnMo
             public void onFailure(Call<MovieResponse> call, Throwable t) {
             }
         });
+    }
 
-        findViewById(R.id.fab_chat).setOnClickListener(v -> {
-            Intent intent = new Intent(this, AvatarChatActivity.class);
-            intent.putExtra("mode", "general");
-            startActivity(intent);
-        });
+    private List<Movie> normalizedResults(List<Movie> results, String mediaType) {
+        if (results == null) return new ArrayList<>();
+        for (Movie movie : results) {
+            movie.setMediaType(mediaType);
+        }
+        return results;
+    }
+
+    private int genreIdForQuery(String query) {
+        String normalized = query.toLowerCase(Locale.ROOT).replace("-", "").replace(" ", "");
+        switch (normalized) {
+            case "action":
+                return 28;
+            case "romance":
+            case "romantic":
+                return 10749;
+            case "comedy":
+                return 35;
+            case "horror":
+                return 27;
+            case "scifi":
+            case "sciencefiction":
+                return 878;
+            case "animation":
+            case "animated":
+                return 16;
+            default:
+                return -1;
+        }
+    }
+
+    private String displayGenreName(String query) {
+        String trimmed = query.trim();
+        if (trimmed.isEmpty()) return "Category";
+        return trimmed.substring(0, 1).toUpperCase(Locale.ROOT) + trimmed.substring(1).toLowerCase(Locale.ROOT);
     }
 
     @Override
@@ -208,6 +348,7 @@ public class MainActivity extends AppCompatActivity implements MovieAdapter.OnMo
         intent.putExtra("movie_overview", movie.getOverview());
         intent.putExtra("movie_release", movie.getReleaseDate());
         intent.putExtra("movie_backdrop", movie.getBackdropPath());
+        intent.putExtra("media_type", movie.getMediaType());
         startActivity(intent);
         overridePendingTransition(R.anim.slide_in_right, R.anim.slide_out_left);
     }

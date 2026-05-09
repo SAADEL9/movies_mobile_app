@@ -12,11 +12,15 @@ import android.widget.TextView;
 import androidx.activity.result.ActivityResultLauncher;
 import androidx.activity.result.contract.ActivityResultContracts;
 import androidx.appcompat.app.AppCompatActivity;
+import androidx.core.view.ViewCompat;
+import androidx.core.view.WindowInsetsCompat;
+import androidx.core.widget.NestedScrollView;
 import com.bumptech.glide.Glide;
 import com.bumptech.glide.request.RequestOptions;
 import com.google.android.material.button.MaterialButton;
 import com.google.android.material.snackbar.Snackbar;
 import com.google.android.material.textfield.TextInputEditText;
+import com.google.android.material.textfield.TextInputLayout;
 import com.saad.moviessaad.R;
 import com.saad.moviessaad.data.SupabaseService;
 import java.io.ByteArrayOutputStream;
@@ -25,12 +29,18 @@ import java.io.InputStream;
 public class ProfileActivity extends AppCompatActivity {
 
     private ImageView profileAvatar;
-    private TextView tvDisplayName, tvDisplayEmail;
+    private TextView tvDisplayName, tvDisplayEmail, tvDisplayBio, tvChangeAvatar;
     private TextInputEditText etUsername, etEmail, etBio;
-    private MaterialButton btnSave, btnSignOut;
+    private TextInputLayout tilUsername, tilEmail, tilBio;
+    private MaterialButton btnEdit, btnSave, btnCancelEdit, btnSignOut;
     private FrameLayout loadingOverlay;
+    private NestedScrollView profileScroll;
     private String userId;
     private String currentAvatarUrl = "";
+    private String loadedUsername = "";
+    private String loadedEmail = "";
+    private String loadedBio = "";
+    private boolean isEditing = false;
 
     private final ActivityResultLauncher<String> galleryLauncher = registerForActivityResult(
             new ActivityResultContracts.GetContent(),
@@ -61,16 +71,49 @@ public class ProfileActivity extends AppCompatActivity {
         profileAvatar = findViewById(R.id.profile_avatar);
         tvDisplayName = findViewById(R.id.tv_display_name);
         tvDisplayEmail = findViewById(R.id.tv_display_email);
+        tvDisplayBio = findViewById(R.id.tv_display_bio);
+        tvChangeAvatar = findViewById(R.id.tv_change_avatar);
+        tilUsername = findViewById(R.id.til_username);
+        tilEmail = findViewById(R.id.til_email);
+        tilBio = findViewById(R.id.til_bio);
+        profileScroll = findViewById(R.id.profile_scroll);
         etUsername = findViewById(R.id.et_username);
         etEmail = findViewById(R.id.et_email);
         etBio = findViewById(R.id.et_bio);
+        btnEdit = findViewById(R.id.btn_edit);
         btnSave = findViewById(R.id.btn_save);
+        btnCancelEdit = findViewById(R.id.btn_cancel_edit);
         btnSignOut = findViewById(R.id.btn_sign_out);
         loadingOverlay = findViewById(R.id.loading_overlay);
 
-        profileAvatar.setOnClickListener(v -> galleryLauncher.launch("image/*"));
+        profileAvatar.setOnClickListener(v -> {
+            if (isEditing) {
+                galleryLauncher.launch("image/*");
+            }
+        });
+        btnEdit.setOnClickListener(v -> setEditing(true));
         btnSave.setOnClickListener(v -> saveProfile());
+        btnCancelEdit.setOnClickListener(v -> {
+            bindProfile(loadedUsername, loadedEmail, loadedBio);
+            setEditing(false);
+        });
         btnSignOut.setOnClickListener(v -> signOut());
+        applySystemBarPadding();
+        setEditing(false);
+    }
+
+    private void applySystemBarPadding() {
+        int baseBottomPadding = getResources().getDimensionPixelSize(R.dimen.profile_bottom_padding);
+        ViewCompat.setOnApplyWindowInsetsListener(profileScroll, (view, insets) -> {
+            int systemBottom = insets.getInsets(WindowInsetsCompat.Type.systemBars()).bottom;
+            view.setPadding(
+                    view.getPaddingLeft(),
+                    view.getPaddingTop(),
+                    view.getPaddingRight(),
+                    Math.max(baseBottomPadding, systemBottom + getResources().getDimensionPixelSize(R.dimen.profile_bottom_padding_extra))
+            );
+            return insets;
+        });
     }
 
     private void loadProfile() {
@@ -79,13 +122,13 @@ public class ProfileActivity extends AppCompatActivity {
             @Override
             public void onSuccess(String username, String email, String bio, String avatarUrl) {
                 showLoading(false);
-                tvDisplayName.setText(username.isEmpty() ? "User" : username);
-                tvDisplayEmail.setText(email);
-                etUsername.setText(username);
-                etEmail.setText(email);
-                etBio.setText(bio);
+                loadedUsername = cleanProfileValue(username);
+                loadedEmail = cleanProfileValue(email);
+                loadedBio = cleanProfileValue(bio);
+                bindProfile(loadedUsername, loadedEmail, loadedBio);
                 currentAvatarUrl = avatarUrl;
                 loadAvatar(avatarUrl);
+                setEditing(false);
             }
 
             @Override
@@ -94,6 +137,40 @@ public class ProfileActivity extends AppCompatActivity {
                 showSnack("Error: " + message, R.color.colorError);
             }
         });
+    }
+
+    private String cleanProfileValue(String value) {
+        if (value == null) return "";
+        String trimmed = value.trim();
+        return trimmed.equalsIgnoreCase("null") ? "" : trimmed;
+    }
+
+    private void bindProfile(String username, String email, String bio) {
+        String displayName = username == null || username.trim().isEmpty() ? "User" : username.trim();
+        String displayEmail = email == null || email.trim().isEmpty() ? "No email saved" : email.trim();
+        String displayBio = bio == null || bio.trim().isEmpty() ? "No bio yet." : bio.trim();
+        tvDisplayName.setText(displayName);
+        tvDisplayEmail.setText(displayEmail);
+        tvDisplayBio.setText(displayBio);
+        etUsername.setText(username);
+        etEmail.setText(email);
+        etBio.setText(bio);
+    }
+
+    private void setEditing(boolean editing) {
+        isEditing = editing;
+        int editVisibility = editing ? View.VISIBLE : View.GONE;
+        int viewVisibility = editing ? View.GONE : View.VISIBLE;
+        tvDisplayBio.setVisibility(viewVisibility);
+        btnEdit.setVisibility(viewVisibility);
+        tvChangeAvatar.setVisibility(editVisibility);
+        tilUsername.setVisibility(editVisibility);
+        tilEmail.setVisibility(editVisibility);
+        tilBio.setVisibility(editVisibility);
+        btnSave.setVisibility(editVisibility);
+        btnCancelEdit.setVisibility(editVisibility);
+        profileAvatar.setClickable(editing);
+        profileAvatar.setFocusable(editing);
     }
 
     private void loadAvatar(String url) {
@@ -146,8 +223,11 @@ public class ProfileActivity extends AppCompatActivity {
             @Override
             public void onSuccess() {
                 showLoading(false);
-                tvDisplayName.setText(username);
-                tvDisplayEmail.setText(email);
+                loadedUsername = username;
+                loadedEmail = email;
+                loadedBio = bio;
+                bindProfile(loadedUsername, loadedEmail, loadedBio);
+                setEditing(false);
                 showSnack("Profile updated", R.color.colorSuccess);
             }
 

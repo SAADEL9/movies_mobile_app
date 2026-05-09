@@ -53,4 +53,16 @@
         <item name="itemTextColor">@color/bottom_nav_color</item>
         <item name="labelVisibilityMode">labeled</item>
     </style>
+
+    <style name="Widget.Movies.Chip.Filter" parent="Widget.Material3.Chip.Filter">
+        <item name="chipBackgroundColor">@color/colorSurfaceLight</item>
+        <item name="chipStrokeColor">@color/colorStroke</item>
+        <item name="chipStrokeWidth">1dp</item>
+        <item name="chipCornerRadius">16dp</item>
+        <item name="android:textColor">@color/colorTextPrimary</item>
+        <item name="android:textSize">13sp</item>
+        <item name="android:textAllCaps">false</item>
+        <item name="checkedIconVisible">false</item>
+        <item name="rippleColor">@color/colorPrimaryLight</item>
+    </style>
 </resources>

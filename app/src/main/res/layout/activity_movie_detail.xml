@@ -148,15 +148,14 @@
             android:paddingBottom="12dp">
 
             <com.google.android.material.button.MaterialButton
-                android:id="@+id/btn_watchlist_visual"
+                android:id="@+id/btn_mark_watched"
                 style="@style/Widget.Movies.Button.Primary"
                 android:layout_width="0dp"
                 android:layout_height="52dp"
                 android:layout_weight="1"
-                android:enabled="false"
-                android:text="Add to Watchlist"
+                android:text="Mark as Watched"
                 android:textColor="@color/colorTextPrimary"
-                app:icon="@drawable/ic_heart_outline"
+                app:icon="@drawable/ic_watched"
                 app:iconTint="@color/colorTextPrimary" />
 
             <ImageView

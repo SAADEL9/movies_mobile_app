@@ -20,6 +20,18 @@ public interface ApiService {
     @GET("movie/now_playing")
     Call<MovieResponse> getNowPlayingMovies(@Query("api_key") String apiKey);
 
+    @GET("discover/movie")
+    Call<MovieResponse> discoverMoviesByGenre(
+            @Query("api_key") String apiKey,
+            @Query("with_genres") int genreId,
+            @Query("sort_by") String sortBy);
+
+    @GET("movie/top_rated")
+    Call<MovieResponse> getTopRatedMovies(@Query("api_key") String apiKey);
+
+    @GET("tv/top_rated")
+    Call<MovieResponse> getTopRatedSeries(@Query("api_key") String apiKey);
+
     /**
      * Recherche des films par nom
      * @param apiKey Clé API TMDB
@@ -37,4 +49,7 @@ public interface ApiService {
      */
     @GET("movie/{movie_id}/videos")
     Call<VideoResponse> getMovieVideos(@Path("movie_id") int id, @Query("api_key") String apiKey);
+
+    @GET("tv/{series_id}/videos")
+    Call<VideoResponse> getSeriesVideos(@Path("series_id") int id, @Query("api_key") String apiKey);
 }

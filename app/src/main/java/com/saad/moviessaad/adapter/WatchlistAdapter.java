@@ -72,6 +72,7 @@ public class WatchlistAdapter extends RecyclerView.Adapter<WatchlistAdapter.Watc
         private final TextView title;
         private final TextView rating;
         private final ImageView heart;
+        private final ImageView watchedIcon;
 
         WatchlistViewHolder(@NonNull View itemView) {
             super(itemView);
@@ -79,11 +80,16 @@ public class WatchlistAdapter extends RecyclerView.Adapter<WatchlistAdapter.Watc
             title = itemView.findViewById(R.id.watchlist_title);
             rating = itemView.findViewById(R.id.watchlist_rating);
             heart = itemView.findViewById(R.id.watchlist_heart);
+            watchedIcon = itemView.findViewById(R.id.watchlist_watched_icon);
         }
 
         void bind(WatchlistItem item) {
             title.setText(item.getTitle());
             rating.setText(String.format(Locale.getDefault(), "⭐ %.1f", item.getRating()));
+            
+            if (watchedIcon != null) {
+                watchedIcon.setVisibility(item.isWatched() ? View.VISIBLE : View.GONE);
+            }
 
             Glide.with(itemView.getContext())
                     .load(ApiConstants.IMAGE_BASE_URL + item.getPosterPath())

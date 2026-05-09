@@ -1,0 +1,5 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <dimen name="profile_bottom_padding">96dp</dimen>
+    <dimen name="profile_bottom_padding_extra">24dp</dimen>
+</resources>

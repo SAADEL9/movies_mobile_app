@@ -69,15 +69,17 @@ public class MovieAdapter extends RecyclerView.Adapter<MovieAdapter.MovieViewHol
         }
 
         public void bind(final Movie movie, final OnMovieClickListener listener) {
-            titleTextView.setText(movie.getTitle());
-            releaseDateTextView.setText(movie.getReleaseDate());
+            titleTextView.setText(movie.getTitle() != null ? movie.getTitle() : "Untitled");
+            String releaseDate = movie.getReleaseDate();
+            releaseDateTextView.setText(releaseDate != null && !releaseDate.isEmpty() ? releaseDate : "N/A");
 
             // Display star rating badge
-            ratingTextView.setText(String.format(Locale.getDefault(), "⭐ %.1f", movie.getVoteAverage()));
+            ratingTextView.setText(String.format(Locale.getDefault(), "★ %.1f", movie.getVoteAverage()));
 
             // Chargement Pro avec transition douce
+            String posterPath = movie.getPosterPath();
             Glide.with(itemView.getContext())
-                    .load(ApiConstants.IMAGE_BASE_URL + movie.getPosterPath())
+                    .load(posterPath != null && !posterPath.isEmpty() ? ApiConstants.IMAGE_BASE_URL + posterPath : null)
                     .transition(DrawableTransitionOptions.withCrossFade())
                     .placeholder(android.R.color.darker_gray)
                     .error(android.R.drawable.ic_menu_report_image)

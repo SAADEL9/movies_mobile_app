@@ -51,14 +51,17 @@ public class MovieDetailActivity extends AppCompatActivity {
     private String backdropPath;
     private String overview;
     private String releaseDate;
+    private String mediaType;
     private double rating;
     private MapView map = null;
     private MyLocationNewOverlay mLocationOverlay;
     private FusedLocationProviderClient fusedLocationClient;
     private String youtubeKey = null;
     private boolean isBookmarked;
+    private boolean isWatched;
     private String userId;
     private ImageView btnHeart;
+    private MaterialButton btnMarkWatched;
 
     @Override
     protected void onCreate(Bundle savedInstanceState) {
@@ -91,6 +94,7 @@ public class MovieDetailActivity extends AppCompatActivity {
         TextView overviewTextView = findViewById(R.id.detail_overview);
         MaterialButton btnPlayTrailer = findViewById(R.id.btn_play_trailer);
         btnHeart = findViewById(R.id.btn_heart);
+        btnMarkWatched = findViewById(R.id.btn_mark_watched);
 
         // Affichage des informations
         titleTextView.setText(movieTitle);
@@ -124,6 +128,7 @@ public class MovieDetailActivity extends AppCompatActivity {
         });
 
         btnHeart.setOnClickListener(v -> toggleBookmark());
+        btnMarkWatched.setOnClickListener(v -> toggleWatchedStatus());
 
         checkWatchlistStatus();
     }
@@ -137,10 +142,12 @@ public class MovieDetailActivity extends AppCompatActivity {
         overview = intent.getStringExtra("movie_overview");
         releaseDate = intent.getStringExtra("movie_release");
         backdropPath = intent.getStringExtra("movie_backdrop");
+        mediaType = intent.getStringExtra("media_type");
         if (movieTitle == null) movieTitle = "Unknown";
         if (posterPath == null) posterPath = "";
         if (overview == null || overview.isEmpty()) overview = "No overview available.";
         if (releaseDate == null) releaseDate = "N/A";
+        if (mediaType == null) mediaType = "movie";
     }
 
     @Override
@@ -169,12 +176,27 @@ public class MovieDetailActivity extends AppCompatActivity {
         btnHeart.setImageResource(isBookmarked ? R.drawable.ic_heart_filled : R.drawable.ic_heart_outline);
     }
 
+    private void updateWatchedButton() {
+        if (btnMarkWatched == null) return;
+        if (isWatched) {
+            btnMarkWatched.setText("Watched");
+            btnMarkWatched.setIconResource(R.drawable.ic_watched);
+            btnMarkWatched.setAlpha(0.6f);
+        } else {
+            btnMarkWatched.setText("Mark as Watched");
+            btnMarkWatched.setIconResource(R.drawable.ic_watched);
+            btnMarkWatched.setAlpha(1.0f);
+        }
+    }
+
     private void checkWatchlistStatus() {
         SupabaseService.INSTANCE.isMovieInWatchlist(userId, movieId, new SupabaseService.WatchlistStatusCallback() {
             @Override
-            public void onSuccess(boolean isInWatchlist) {
+            public void onSuccess(boolean isInWatchlist, boolean watched) {
                 isBookmarked = isInWatchlist;
+                isWatched = watched;
                 updateHeartIcon();
+                updateWatchedButton();
             }
 
             @Override
@@ -190,7 +212,9 @@ public class MovieDetailActivity extends AppCompatActivity {
                 @Override
                 public void onSuccess() {
                     isBookmarked = false;
+                    isWatched = false;
                     updateHeartIcon();
+                    updateWatchedButton();
                     showSnack("Removed from Watchlist", R.color.colorMuted);
                 }
 
@@ -207,6 +231,43 @@ public class MovieDetailActivity extends AppCompatActivity {
                 isBookmarked = true;
                 updateHeartIcon();
                 showSnack("✓ Added to Watchlist", R.color.colorSuccess);
+            }
+
+            @Override
+            public void onError(String message) {
+                showSnack("Error: " + message, R.color.colorError);
+            }
+        });
+    }
+
+    private void toggleWatchedStatus() {
+        if (!isBookmarked) {
+            // Automatically add to watchlist if marking as watched
+            SupabaseService.INSTANCE.upsertWatchlistItem(userId, movieId, movieTitle, posterPath, rating, new SupabaseService.ActionCallback() {
+                @Override
+                public void onSuccess() {
+                    isBookmarked = true;
+                    updateHeartIcon();
+                    updateWatchedInDatabase(!isWatched);
+                }
+
+                @Override
+                public void onError(String message) {
+                    showSnack("Error: " + message, R.color.colorError);
+                }
+            });
+        } else {
+            updateWatchedInDatabase(!isWatched);
+        }
+    }
+
+    private void updateWatchedInDatabase(boolean newStatus) {
+        SupabaseService.INSTANCE.updateWatchlistWatchedStatus(userId, movieId, newStatus, new SupabaseService.ActionCallback() {
+            @Override
+            public void onSuccess() {
+                isWatched = newStatus;
+                updateWatchedButton();
+                showSnack(isWatched ? "✓ Marked as Watched" : "Unmarked as Watched", R.color.colorSuccess);
             }
 
             @Override
@@ -278,7 +339,10 @@ public class MovieDetailActivity extends AppCompatActivity {
      */
     private void fetchMovieTrailer() {
         ApiService apiService = ApiClient.getClient().create(ApiService.class);
-        apiService.getMovieVideos(movieId, ApiConstants.API_KEY).enqueue(new Callback<VideoResponse>() {
+        Call<VideoResponse> trailerCall = "tv".equals(mediaType)
+                ? apiService.getSeriesVideos(movieId, ApiConstants.API_KEY)
+                : apiService.getMovieVideos(movieId, ApiConstants.API_KEY);
+        trailerCall.enqueue(new Callback<VideoResponse>() {
             @Override
             public void onResponse(Call<VideoResponse> call, Response<VideoResponse> response) {
                 if (response.isSuccessful() && response.body() != null) {

@@ -28,7 +28,8 @@ data class WatchlistEntry(
     val title: String,
     @SerialName("poster_path") val posterPath: String,
     val rating: Double,
-    @SerialName("added_at") val addedAt: String
+    @SerialName("added_at") val addedAt: String,
+    val watched: Boolean = false
 )
 
 @Serializable
@@ -55,7 +56,7 @@ object SupabaseService {
     }
 
     interface WatchlistStatusCallback {
-        fun onSuccess(isInWatchlist: Boolean)
+        fun onSuccess(isInWatchlist: Boolean, isWatched: Boolean)
         fun onError(message: String)
     }
 
@@ -258,10 +259,15 @@ object SupabaseService {
                         eq("movie_id", movieId)
                     }
                 }
-                // Check if result is empty
-                JSONArray(response.data.toString()).length() > 0
-            }.onSuccess { exists ->
-                mainHandler.post { callback.onSuccess(exists) }
+                val array = JSONArray(response.data.toString())
+                if (array.length() > 0) {
+                    val isWatched = array.getJSONObject(0).optBoolean("watched", false)
+                    Pair(true, isWatched)
+                } else {
+                    Pair(false, false)
+                }
+            }.onSuccess { (exists, watched) ->
+                mainHandler.post { callback.onSuccess(exists, watched) }
             }.onFailure { error ->
                 postStatusError(callback, error.message ?: "Watchlist lookup failed")
             }
@@ -330,6 +336,25 @@ object SupabaseService {
         }
     }
 
+    fun updateWatchlistWatchedStatus(userId: String, movieId: Int, watched: Boolean, callback: ActionCallback) {
+        ioScope.launch {
+            runCatching {
+                SupabaseClientProvider.client.from("watchlist").update(
+                    mapOf("watched" to watched)
+                ) {
+                    filter {
+                        eq("user_id", userId)
+                        eq("movie_id", movieId)
+                    }
+                }
+            }.onSuccess {
+                mainHandler.post { callback.onSuccess() }
+            }.onFailure { error ->
+                postActionError(callback, error.message ?: "Unable to update watched status")
+            }
+        }
+    }
+
     fun loadWatchlist(userId: String, callback: WatchlistCallback) {
         ioScope.launch {
             runCatching {
@@ -358,7 +383,8 @@ object SupabaseService {
                     item.optString("title"),
                     item.optString("poster_path"),
                     item.optDouble("rating"),
-                    item.optString("added_at")
+                    item.optString("added_at"),
+                    item.optBoolean("watched", false)
                 )
             )
         }
@@ -370,14 +396,31 @@ object SupabaseService {
     }
 
     private fun postStatusError(callback: WatchlistStatusCallback, message: String) {
-        mainHandler.post { callback.onError(message) }
+        mainHandler.post { callback.onError(friendlyDatabaseMessage(message)) }
     }
 
     private fun postWatchlistError(callback: WatchlistCallback, message: String) {
-        mainHandler.post { callback.onError(message) }
+        mainHandler.post { callback.onError(friendlyDatabaseMessage(message)) }
     }
 
     private fun postActionError(callback: ActionCallback, message: String) {
-        mainHandler.post { callback.onError(message) }
+        mainHandler.post { callback.onError(friendlyDatabaseMessage(message)) }
+    }
+
+    private fun friendlyDatabaseMessage(message: String): String {
+        val lowerMessage = message.lowercase(Locale.US)
+        if (lowerMessage.contains("watchlist") &&
+            (lowerMessage.contains("does not exist") ||
+                    lowerMessage.contains("could not find the table") ||
+                    lowerMessage.contains("relation"))
+        ) {
+            return "Supabase setup missing: create the watchlist table using supabase_watchlist_setup.sql"
+        }
+        if (lowerMessage.contains("watched") &&
+            (lowerMessage.contains("column") || lowerMessage.contains("schema cache"))
+        ) {
+            return "Supabase setup missing: add the watched column using supabase_watchlist_setup.sql"
+        }
+        return message
     }
 }

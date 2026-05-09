@@ -53,6 +53,17 @@ public class AvatarChatActivity extends AppCompatActivity implements TextToSpeec
     private static final int REQUEST_RECORD_AUDIO = 4401;
     private static final String UTTERANCE_ID = "cinebot_utterance";
 
+    // ─── Avatar scale & camera tuning constants ───────────────────────────────
+    // Increase AVATAR_SCALE to make the avatar bigger, decrease to make smaller.
+    private static final float AVATAR_SCALE       = 0.55f;
+    // AVATAR_Y: negative moves avatar downward so the head sits in the center.
+    private static final float AVATAR_Y           = -1.1f;
+    // CAMERA_Y: positive tilts camera upward (looks at face/chest level).
+    private static final float CAMERA_Y           = 0.35f;
+    // CAMERA_Z: distance from avatar — increase to zoom out, decrease to zoom in.
+    private static final float CAMERA_Z           = 2.0f;
+    // ──────────────────────────────────────────────────────────────────────────
+
     private enum AvatarState {
         IDLE,
         WAVING,
@@ -102,17 +113,18 @@ public class AvatarChatActivity extends AppCompatActivity implements TextToSpeec
             getSupportActionBar().setTitle("CineBot");
         }
 
-        sceneContainer = findViewById(R.id.scene_container);
-        avatarStage = findViewById(R.id.avatar_stage);
-        recyclerView = findViewById(R.id.recycler_chat);
-        listeningRing = findViewById(R.id.listening_ring);
-        subtitleView = findViewById(R.id.tv_subtitle);
-        messageInput = findViewById(R.id.et_message);
-        starterChips = findViewById(R.id.starter_chips);
-        starterChipsScroll = findViewById(R.id.starter_chips_scroll);
+        sceneContainer    = findViewById(R.id.scene_container);
+        avatarStage       = findViewById(R.id.avatar_stage);
+        recyclerView      = findViewById(R.id.recycler_chat);
+        listeningRing     = findViewById(R.id.listening_ring);
+        subtitleView      = findViewById(R.id.tv_subtitle);
+        messageInput      = findViewById(R.id.et_message);
+        starterChips      = findViewById(R.id.starter_chips);
+        starterChipsScroll= findViewById(R.id.starter_chips_scroll);
         conversationPanel = findViewById(R.id.conversation_panel);
-        inputContainer = findViewById(R.id.input_container);
-        chatTabs = findViewById(R.id.chat_tabs);
+        inputContainer    = findViewById(R.id.input_container);
+        chatTabs          = findViewById(R.id.chat_tabs);
+
         if (canUseTextToSpeech()) {
             textToSpeech = new TextToSpeech(this, this);
         }
@@ -124,10 +136,13 @@ public class AvatarChatActivity extends AppCompatActivity implements TextToSpeec
         setupStarterChips();
         setupSpeechRecognizer();
         setupInput();
+
         messageInput.clearFocus();
         avatarStage.requestFocus();
         startOpeningFlow();
     }
+
+    // ─── Chat list ────────────────────────────────────────────────────────────
 
     private void setupChatList() {
         adapter = new ChatAdapter(chatMessages);
@@ -135,25 +150,23 @@ public class AvatarChatActivity extends AppCompatActivity implements TextToSpeec
         recyclerView.setAdapter(adapter);
     }
 
+    // ─── Tabs ─────────────────────────────────────────────────────────────────
+
     private void setupTabs() {
         chatTabs.addTab(chatTabs.newTab().setText("Chat"));
         chatTabs.addTab(chatTabs.newTab().setText("3D Avatar"));
+
+        // Default to avatar tab
         TabLayout.Tab avatarTab = chatTabs.getTabAt(1);
-        if (avatarTab != null) {
-            avatarTab.select();
-        }
+        if (avatarTab != null) avatarTab.select();
         showAvatarTab();
 
         chatTabs.addOnTabSelectedListener(new TabLayout.OnTabSelectedListener() {
             @Override
             public void onTabSelected(TabLayout.Tab tab) {
-                if (tab.getPosition() == 0) {
-                    showChatTab();
-                } else {
-                    showAvatarTab();
-                }
+                if (tab.getPosition() == 0) showChatTab();
+                else showAvatarTab();
             }
-
             @Override public void onTabUnselected(TabLayout.Tab tab) {}
             @Override public void onTabReselected(TabLayout.Tab tab) {}
         });
@@ -172,15 +185,18 @@ public class AvatarChatActivity extends AppCompatActivity implements TextToSpeec
         recyclerView.setVisibility(View.GONE);
         avatarStage.setVisibility(View.VISIBLE);
         conversationPanel.setVisibility(View.VISIBLE);
-        inputContainer.setVisibility(View.VISIBLE); // Enable text and voice zone
+        inputContainer.setVisibility(View.VISIBLE);
         subtitleView.setVisibility(View.VISIBLE);
         starterChipsScroll.setVisibility(View.GONE);
         messageInput.clearFocus();
         avatarStage.requestFocus();
     }
 
+    // ─── SceneView / 3D avatar ────────────────────────────────────────────────
+
     private void setupSceneView() {
         addAvatarFallback();
+
         if (!canUse3dAvatar()) {
             avatar3dEnabled = false;
             avatarFallbackView.setVisibility(View.VISIBLE);
@@ -194,7 +210,7 @@ public class AvatarChatActivity extends AppCompatActivity implements TextToSpeec
                     FrameLayout.LayoutParams.MATCH_PARENT));
             avatarFallbackView.setVisibility(View.GONE);
             avatar3dEnabled = true;
-        } catch (Throwable throwable) {
+        } catch (Throwable t) {
             sceneView = null;
             avatar3dEnabled = false;
             avatarFallbackView.setVisibility(View.VISIBLE);
@@ -203,30 +219,16 @@ public class AvatarChatActivity extends AppCompatActivity implements TextToSpeec
     }
 
     private boolean canUse3dAvatar() {
-        if (Build.VERSION.SDK_INT < Build.VERSION_CODES.P) {
-            return false;
-        }
-
-        return true;
+        return Build.VERSION.SDK_INT >= Build.VERSION_CODES.P;
     }
 
     private boolean canUseTextToSpeech() {
         return true;
     }
 
-    private boolean isLikelyEmulator() {
-        String deviceInfo = (Build.FINGERPRINT + " " + Build.MODEL + " " + Build.MANUFACTURER + " "
-                + Build.BRAND + " " + Build.DEVICE + " " + Build.PRODUCT).toLowerCase(Locale.US);
-        return deviceInfo.contains("generic")
-                || deviceInfo.contains("emulator")
-                || deviceInfo.contains("sdk_gphone")
-                || deviceInfo.contains("sdk_phone")
-                || deviceInfo.contains("goldfish")
-                || deviceInfo.contains("ranchu");
-    }
-
     private void addAvatarFallback() {
         if (avatarFallbackView != null) return;
+
         FrameLayout fallbackLayout = new FrameLayout(this);
 
         ImageView avatarImage = new ImageView(this);
@@ -257,16 +259,19 @@ public class AvatarChatActivity extends AppCompatActivity implements TextToSpeec
                 FrameLayout.LayoutParams.MATCH_PARENT));
     }
 
+    // ─── Mode (general vs movie) ──────────────────────────────────────────────
+
     private void setupMode() {
         Intent intent = getIntent();
         mode = intent.getStringExtra("mode");
         if (mode == null) mode = "general";
 
         if ("movie".equals(mode)) {
-            String title = safeValue(intent.getStringExtra("movie_title"), "this movie");
+            String title    = safeValue(intent.getStringExtra("movie_title"),    "this movie");
             String overview = safeValue(intent.getStringExtra("movie_overview"), "No overview available.");
-            String year = safeValue(intent.getStringExtra("movie_year"), "N/A");
-            String rating = safeValue(intent.getStringExtra("movie_rating"), "0");
+            String year     = safeValue(intent.getStringExtra("movie_year"),     "N/A");
+            String rating   = safeValue(intent.getStringExtra("movie_rating"),   "0");
+
             introText = "Hey! Want to know more about " + title + "? Ask me anything!";
             conversationHistory.add(new OllamaMessage("system",
                     "You are CineBot. The user is viewing '" + title + "' (" + year + "), rated "
@@ -282,8 +287,10 @@ public class AvatarChatActivity extends AppCompatActivity implements TextToSpeec
     }
 
     private String safeValue(String value, String fallback) {
-        return value == null || value.trim().isEmpty() ? fallback : value.trim();
+        return (value == null || value.trim().isEmpty()) ? fallback : value.trim();
     }
+
+    // ─── Starter chips ────────────────────────────────────────────────────────
 
     private void setupStarterChips() {
         String[] suggestions = "movie".equals(mode)
@@ -302,25 +309,31 @@ public class AvatarChatActivity extends AppCompatActivity implements TextToSpeec
         }
     }
 
+    // ─── Input (send + mic) ───────────────────────────────────────────────────
+
     private void setupInput() {
-        findViewById(R.id.btn_send).setOnClickListener(v -> sendMessage(messageInput.getText().toString()));
+        findViewById(R.id.btn_send).setOnClickListener(v ->
+                sendMessage(messageInput.getText().toString()));
+
         findViewById(R.id.btn_mic).setOnTouchListener((v, event) -> {
-            if (event.getAction() == MotionEvent.ACTION_DOWN) {
-                startListening();
-                return true;
-            }
-            if (event.getAction() == MotionEvent.ACTION_UP || event.getAction() == MotionEvent.ACTION_CANCEL) {
-                stopListening();
-                return true;
+            switch (event.getAction()) {
+                case MotionEvent.ACTION_DOWN:
+                    startListening();
+                    return true;
+                case MotionEvent.ACTION_UP:
+                case MotionEvent.ACTION_CANCEL:
+                    stopListening();
+                    return true;
             }
             return true;
         });
     }
 
+    // ─── Speech recognizer ────────────────────────────────────────────────────
+
     private void setupSpeechRecognizer() {
-        if (!SpeechRecognizer.isRecognitionAvailable(this)) {
-            return;
-        }
+        if (!SpeechRecognizer.isRecognitionAvailable(this)) return;
+
         speechRecognizer = SpeechRecognizer.createSpeechRecognizer(this);
         speechRecognizer.setRecognitionListener(new RecognitionListener() {
             @Override public void onReadyForSpeech(Bundle params) {}
@@ -333,14 +346,13 @@ public class AvatarChatActivity extends AppCompatActivity implements TextToSpeec
 
             @Override
             public void onError(int error) {
-                if (state == AvatarState.LISTENING) {
-                    setAvatarState(AvatarState.IDLE);
-                }
+                if (state == AvatarState.LISTENING) setAvatarState(AvatarState.IDLE);
             }
 
             @Override
             public void onResults(Bundle results) {
-                ArrayList<String> matches = results.getStringArrayList(SpeechRecognizer.RESULTS_RECOGNITION);
+                ArrayList<String> matches =
+                        results.getStringArrayList(SpeechRecognizer.RESULTS_RECOGNITION);
                 if (matches != null && !matches.isEmpty()) {
                     sendMessage(matches.get(0));
                 } else {
@@ -350,69 +362,112 @@ public class AvatarChatActivity extends AppCompatActivity implements TextToSpeec
         });
     }
 
+    // ─── Opening flow ─────────────────────────────────────────────────────────
+
     private void startOpeningFlow() {
         loadAvatarModel("avatar.glb");
-        handler.postDelayed(() -> setAvatarState(AvatarState.WAVING), 500);
-        handler.postDelayed(() -> setAvatarState(AvatarState.IDLE), 3000);
-        handler.postDelayed(() -> speak(introText), 3100);
+        handler.postDelayed(() -> setAvatarState(AvatarState.WAVING),  500);
+        handler.postDelayed(() -> setAvatarState(AvatarState.IDLE),   3000);
+        handler.postDelayed(() -> speak(introText),                    3100);
     }
+
+    // ─── Avatar state machine ─────────────────────────────────────────────────
 
     private void setAvatarState(AvatarState newState) {
         if (state == newState) return;
         state = newState;
-        if (newState == AvatarState.IDLE) {
-            stopListeningPulse();
-            loadAvatarModel("avatar.glb");
-        } else if (newState == AvatarState.WAVING) {
-            stopListeningPulse();
-            loadAvatarModel("waving.glb");
-        } else if (newState == AvatarState.LISTENING) {
-            startListeningPulse();
-        } else if (newState == AvatarState.TALKING) {
-            stopListeningPulse();
-            loadAvatarModel("talking.glb");
+
+        switch (newState) {
+            case IDLE:
+                stopListeningPulse();
+                loadAvatarModel("avatar.glb");
+                break;
+            case WAVING:
+                stopListeningPulse();
+                loadAvatarModel("waving.glb");
+                break;
+            case LISTENING:
+                startListeningPulse();
+                // keep current model — just show the ring
+                break;
+            case TALKING:
+                stopListeningPulse();
+                loadAvatarModel("talking.glb");
+                break;
         }
     }
+
+    // ─── Load GLB model ───────────────────────────────────────────────────────
 
     private void loadAvatarModel(String assetName) {
         if (!avatar3dEnabled || sceneView == null) return;
+
         try {
+            // Remove previous node cleanly
             if (currentModelNode != null) {
                 sceneView.removeChildNode(currentModelNode);
+                currentModelNode = null;
             }
+
             FilamentInstance modelInstance = sceneView.getModelLoader()
                     .createModelInstance(assetName, resourceFileName -> null);
-            
-            // Refactored scale and position to ensure the entire avatar is visible and centered.
-            // Using scale (0.7f) and moving it down (-0.8f) as per the updated plan.
-            currentModelNode = new ModelNode(modelInstance, true, 0.7f, new Float3(0.0f, -0.8f, 0.0f));
-            
-            // Rotate 180 degrees to face the user.
+
+            // ── Position tuning ──────────────────────────────────────────────
+            // AVATAR_SCALE : overall size of the avatar
+            // AVATAR_Y     : vertical offset (negative = move down so head centers)
+            currentModelNode = new ModelNode(
+                    modelInstance,
+                    true,
+                    AVATAR_SCALE,
+                    new Float3(0.0f, AVATAR_Y, 0.0f)
+            );
+
+            // Rotate 180° so avatar faces the camera
             currentModelNode.setRotation(new Float3(0.0f, 180.0f, 0.0f));
 
             sceneView.addChildNode(currentModelNode);
-        } catch (Throwable throwable) {
-            subtitleView.setText("CineBot could not load " + assetName + ".");
+
+            // ── Camera tuning ────────────────────────────────────────────────
+            // CAMERA_Y : height of camera (positive = look at chest/face level)
+            // CAMERA_Z : distance from avatar (larger = more zoomed out)
+            if (sceneView.getCameraNode() != null) {
+                sceneView.getCameraNode().setPosition(new Float3(0.0f, CAMERA_Y, CAMERA_Z));
+            }
+
+        } catch (Throwable t) {
+            // Graceful degradation: show message but keep app running
+            runOnUiThread(() ->
+                    subtitleView.setText("CineBot could not load the 3D model.")
+            );
         }
     }
 
+    // ─── Voice input ──────────────────────────────────────────────────────────
+
     private void startListening() {
         if (waitingForOllama) return;
+
         if (speechRecognizer == null) {
-            Toast.makeText(this, "Speech recognition is unavailable on this device.", Toast.LENGTH_SHORT).show();
+            Toast.makeText(this, "Speech recognition is unavailable on this device.",
+                    Toast.LENGTH_SHORT).show();
             return;
         }
-        if (ContextCompat.checkSelfPermission(this, Manifest.permission.RECORD_AUDIO) != PackageManager.PERMISSION_GRANTED) {
-            ActivityCompat.requestPermissions(this, new String[]{Manifest.permission.RECORD_AUDIO}, REQUEST_RECORD_AUDIO);
+
+        if (ContextCompat.checkSelfPermission(this, Manifest.permission.RECORD_AUDIO)
+                != PackageManager.PERMISSION_GRANTED) {
+            ActivityCompat.requestPermissions(this,
+                    new String[]{Manifest.permission.RECORD_AUDIO}, REQUEST_RECORD_AUDIO);
             return;
         }
-        if (textToSpeech != null) {
-            textToSpeech.stop();
-        }
+
+        if (textToSpeech != null) textToSpeech.stop();
+
         Intent intent = new Intent(RecognizerIntent.ACTION_RECOGNIZE_SPEECH);
-        intent.putExtra(RecognizerIntent.EXTRA_LANGUAGE_MODEL, RecognizerIntent.LANGUAGE_MODEL_FREE_FORM);
+        intent.putExtra(RecognizerIntent.EXTRA_LANGUAGE_MODEL,
+                RecognizerIntent.LANGUAGE_MODEL_FREE_FORM);
         intent.putExtra(RecognizerIntent.EXTRA_LANGUAGE, Locale.getDefault());
         intent.putExtra(RecognizerIntent.EXTRA_PARTIAL_RESULTS, false);
+
         setAvatarState(AvatarState.LISTENING);
         subtitleView.setText("Listening...");
         speechRecognizer.startListening(intent);
@@ -424,13 +479,16 @@ public class AvatarChatActivity extends AppCompatActivity implements TextToSpeec
         }
     }
 
+    // ─── Send message to Ollama ───────────────────────────────────────────────
+
     private void sendMessage(String text) {
-        String trimmed = text == null ? "" : text.trim();
+        String trimmed = (text == null) ? "" : text.trim();
         if (trimmed.isEmpty() || waitingForOllama) return;
 
         messageInput.setText("");
         starterChipsScroll.setVisibility(View.GONE);
         subtitleView.setText(trimmed);
+
         chatMessages.add(new ChatMessage(trimmed, true));
         adapter.notifyItemInserted(chatMessages.size() - 1);
         recyclerView.scrollToPosition(chatMessages.size() - 1);
@@ -439,6 +497,7 @@ public class AvatarChatActivity extends AppCompatActivity implements TextToSpeec
         waitingForOllama = true;
         setAvatarState(AvatarState.IDLE);
 
+        // Show typing indicator
         chatMessages.add(ChatMessage.typingIndicator());
         adapter.notifyItemInserted(chatMessages.size() - 1);
         recyclerView.scrollToPosition(chatMessages.size() - 1);
@@ -482,6 +541,8 @@ public class AvatarChatActivity extends AppCompatActivity implements TextToSpeec
         }
     }
 
+    // ─── Text To Speech ───────────────────────────────────────────────────────
+
     private void speak(String text) {
         if (text == null || text.trim().isEmpty()) return;
         if (textToSpeech == null) return;
@@ -501,18 +562,21 @@ public class AvatarChatActivity extends AppCompatActivity implements TextToSpeec
             textToSpeech.setSpeechRate(0.9f);
             textToSpeech.setPitch(1.0f);
             textToSpeech.setOnUtteranceProgressListener(new UtteranceProgressListener() {
-                @Override public void onStart(String utteranceId) {
+                @Override
+                public void onStart(String utteranceId) {
                     runOnUiThread(() -> setAvatarState(AvatarState.TALKING));
                 }
-
-                @Override public void onDone(String utteranceId) {
+                @Override
+                public void onDone(String utteranceId) {
                     runOnUiThread(() -> setAvatarState(AvatarState.IDLE));
                 }
-
-                @Override public void onError(String utteranceId) {
+                @Override
+                public void onError(String utteranceId) {
                     runOnUiThread(() -> setAvatarState(AvatarState.IDLE));
                 }
             });
+
+            // Speak any text that arrived before TTS was ready
             if (pendingSpeechText != null) {
                 String text = pendingSpeechText;
                 pendingSpeechText = null;
@@ -520,6 +584,8 @@ public class AvatarChatActivity extends AppCompatActivity implements TextToSpeec
             }
         }
     }
+
+    // ─── Listening pulse animation ────────────────────────────────────────────
 
     private void startListeningPulse() {
         if (listeningAnimator == null) {
@@ -533,12 +599,12 @@ public class AvatarChatActivity extends AppCompatActivity implements TextToSpeec
     }
 
     private void stopListeningPulse() {
-        if (listeningAnimator != null) {
-            listeningAnimator.cancel();
-        }
+        if (listeningAnimator != null) listeningAnimator.cancel();
         listeningRing.setAlpha(0f);
         listeningRing.setVisibility(View.VISIBLE);
     }
+
+    // ─── Options menu ─────────────────────────────────────────────────────────
 
     @Override
     public boolean onCreateOptionsMenu(Menu menu) {
@@ -570,8 +636,11 @@ public class AvatarChatActivity extends AppCompatActivity implements TextToSpeec
         setAvatarState(AvatarState.IDLE);
     }
 
+    // ─── Permissions ──────────────────────────────────────────────────────────
+
     @Override
-    public void onRequestPermissionsResult(int requestCode, @NonNull String[] permissions, @NonNull int[] grantResults) {
+    public void onRequestPermissionsResult(int requestCode,
+                                           @NonNull String[] permissions, @NonNull int[] grantResults) {
         super.onRequestPermissionsResult(requestCode, permissions, grantResults);
         if (requestCode == REQUEST_RECORD_AUDIO
                 && grantResults.length > 0
@@ -580,12 +649,12 @@ public class AvatarChatActivity extends AppCompatActivity implements TextToSpeec
         }
     }
 
+    // ─── Lifecycle ────────────────────────────────────────────────────────────
+
     @Override
     protected void onDestroy() {
         handler.removeCallbacksAndMessages(null);
-        if (speechRecognizer != null) {
-            speechRecognizer.destroy();
-        }
+        if (speechRecognizer != null) speechRecognizer.destroy();
         if (textToSpeech != null) {
             textToSpeech.stop();
             textToSpeech.shutdown();
