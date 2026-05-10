@@ -1,3 +1,5 @@
+import java.util.Properties
+
 plugins {
     alias(libs.plugins.android.application)
     alias(libs.plugins.kotlin.android)
@@ -16,6 +18,25 @@ android {
         versionName = "1.0"
 
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
+
+        val localProperties = Properties()
+        val localPropertiesFile = rootProject.file("local.properties")
+        if (localPropertiesFile.exists()) {
+            localProperties.load(localPropertiesFile.inputStream())
+        }
+
+        buildConfigField("String", "TMDB_API_KEY", "\"${localProperties.getProperty("TMDB_API_KEY") ?: ""}\"")
+        buildConfigField("String", "TMDB_BASE_URL", "\"${localProperties.getProperty("TMDB_BASE_URL") ?: ""}\"")
+        buildConfigField("String", "TMDB_IMAGE_BASE_URL", "\"${localProperties.getProperty("TMDB_IMAGE_BASE_URL") ?: ""}\"")
+        buildConfigField("String", "OPENROUTER_API_KEY", "\"${localProperties.getProperty("OPENROUTER_API_KEY") ?: ""}\"")
+        buildConfigField("String", "OPENROUTER_BASE_URL", "\"${localProperties.getProperty("OPENROUTER_BASE_URL") ?: ""}\"")
+        buildConfigField("String", "SUPABASE_URL", "\"${localProperties.getProperty("SUPABASE_URL") ?: ""}\"")
+        buildConfigField("String", "SUPABASE_PUBLISHABLE_KEY", "\"${localProperties.getProperty("SUPABASE_PUBLISHABLE_KEY") ?: ""}\"")
+        buildConfigField("String", "OLLAMA_BASE_URL", "\"${localProperties.getProperty("OLLAMA_BASE_URL") ?: ""}\"")
+    }
+
+    buildFeatures {
+        buildConfig = true
     }
 
     buildTypes {
