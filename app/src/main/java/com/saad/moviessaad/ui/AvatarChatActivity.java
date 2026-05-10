@@ -15,6 +15,7 @@ import android.speech.RecognizerIntent;
 import android.speech.SpeechRecognizer;
 import android.speech.tts.TextToSpeech;
 import android.speech.tts.UtteranceProgressListener;
+import android.speech.tts.Voice;
 import android.view.Gravity;
 import android.view.Menu;
 import android.view.MenuItem;
@@ -41,8 +42,10 @@ import com.saad.moviessaad.api.MovieAiClient;
 import com.saad.moviessaad.api.OllamaMessage;
 import com.saad.moviessaad.model.ChatMessage;
 import java.util.ArrayList;
+import java.util.HashSet;
 import java.util.List;
 import java.util.Locale;
+import java.util.Set;
 import io.github.sceneview.SceneView;
 import com.google.android.filament.gltfio.FilamentInstance;
 import io.github.sceneview.node.ModelNode;
@@ -55,13 +58,13 @@ public class AvatarChatActivity extends AppCompatActivity implements TextToSpeec
 
     // ─── Avatar scale & camera tuning constants ───────────────────────────────
     // Increase AVATAR_SCALE to make the avatar bigger, decrease to make smaller.
-    private static final float AVATAR_SCALE       = 0.55f;
+    private static final float AVATAR_SCALE       = 0.4f;
     // AVATAR_Y: negative moves avatar downward so the head sits in the center.
-    private static final float AVATAR_Y           = -1.1f;
+    private static final float AVATAR_Y           = 0.0f;
     // CAMERA_Y: positive tilts camera upward (looks at face/chest level).
-    private static final float CAMERA_Y           = 0.35f;
+    private static final float CAMERA_Y           = 0.8f;
     // CAMERA_Z: distance from avatar — increase to zoom out, decrease to zoom in.
-    private static final float CAMERA_Z           = 2.0f;
+    private static final float CAMERA_Z           = 3.5f;
     // ──────────────────────────────────────────────────────────────────────────
 
     private enum AvatarState {
@@ -104,6 +107,7 @@ public class AvatarChatActivity extends AppCompatActivity implements TextToSpeec
     protected void onCreate(Bundle savedInstanceState) {
         super.onCreate(savedInstanceState);
         setContentView(R.layout.activity_avatar_chat);
+        SystemBarInsets.applyToRoot(findViewById(android.R.id.content));
         getWindow().setSoftInputMode(WindowManager.LayoutParams.SOFT_INPUT_STATE_ALWAYS_HIDDEN);
 
         Toolbar toolbar = findViewById(R.id.toolbar);
@@ -365,10 +369,23 @@ public class AvatarChatActivity extends AppCompatActivity implements TextToSpeec
     // ─── Opening flow ─────────────────────────────────────────────────────────
 
     private void startOpeningFlow() {
+        // Step 1: load idle avatar immediately
         loadAvatarModel("avatar.glb");
-        handler.postDelayed(() -> setAvatarState(AvatarState.WAVING),  500);
-        handler.postDelayed(() -> setAvatarState(AvatarState.IDLE),   3000);
-        handler.postDelayed(() -> speak(introText),                    3100);
+
+        // Step 2: start waving after 500ms
+        handler.postDelayed(() -> {
+            setAvatarState(AvatarState.WAVING);
+        }, 500);
+
+        // Step 3: go back to idle after waving
+        handler.postDelayed(() -> {
+            setAvatarState(AvatarState.IDLE);
+        }, 3500);
+
+        // Step 4: speak intro after waving finishes
+        handler.postDelayed(() -> {
+            speak(introText);
+        }, 3600);
     }
 
     // ─── Avatar state machine ─────────────────────────────────────────────────
@@ -432,6 +449,7 @@ public class AvatarChatActivity extends AppCompatActivity implements TextToSpeec
             // CAMERA_Z : distance from avatar (larger = more zoomed out)
             if (sceneView.getCameraNode() != null) {
                 sceneView.getCameraNode().setPosition(new Float3(0.0f, CAMERA_Y, CAMERA_Z));
+                sceneView.getCameraNode().setRotation(new Float3(-10.0f, 0.0f, 0.0f));
             }
 
         } catch (Throwable t) {
@@ -559,8 +577,9 @@ public class AvatarChatActivity extends AppCompatActivity implements TextToSpeec
         if (status == TextToSpeech.SUCCESS) {
             ttsReady = true;
             textToSpeech.setLanguage(Locale.US);
+            selectMaleVoice();
             textToSpeech.setSpeechRate(0.9f);
-            textToSpeech.setPitch(1.0f);
+            textToSpeech.setPitch(0.78f);
             textToSpeech.setOnUtteranceProgressListener(new UtteranceProgressListener() {
                 @Override
                 public void onStart(String utteranceId) {
@@ -582,6 +601,36 @@ public class AvatarChatActivity extends AppCompatActivity implements TextToSpeec
                 pendingSpeechText = null;
                 speak(text);
             }
+        }
+    }
+
+    private void selectMaleVoice() {
+        if (Build.VERSION.SDK_INT < Build.VERSION_CODES.LOLLIPOP || textToSpeech == null) return;
+
+        Set<Voice> voices = textToSpeech.getVoices();
+        if (voices == null || voices.isEmpty()) return;
+
+        Voice fallback = null;
+        for (Voice voice : voices) {
+            Locale locale = voice.getLocale();
+            if (locale == null || !Locale.US.getLanguage().equals(locale.getLanguage())) continue;
+            if (fallback == null) fallback = voice;
+
+            String name = voice.getName() == null ? "" : voice.getName().toLowerCase(Locale.US);
+            Set<String> features = voice.getFeatures() == null
+                    ? new HashSet<>()
+                    : voice.getFeatures();
+            String featureText = features.toString().toLowerCase(Locale.US);
+            boolean looksMale = (name.contains("male") && !name.contains("female"))
+                    || featureText.contains("male");
+            if (looksMale && !voice.isNetworkConnectionRequired()) {
+                textToSpeech.setVoice(voice);
+                return;
+            }
+        }
+
+        if (fallback != null) {
+            textToSpeech.setVoice(fallback);
         }
     }
 

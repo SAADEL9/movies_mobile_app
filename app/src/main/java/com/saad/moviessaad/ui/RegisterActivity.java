@@ -22,6 +22,7 @@ public class RegisterActivity extends AppCompatActivity {
     protected void onCreate(Bundle savedInstanceState) {
         super.onCreate(savedInstanceState);
         setContentView(R.layout.activity_register);
+        SystemBarInsets.applyToRoot(findViewById(android.R.id.content));
         findViewById(android.R.id.content).startAnimation(AnimationUtils.loadAnimation(this, R.anim.fade_in));
 
         etUsername = findViewById(R.id.et_username);

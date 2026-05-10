@@ -71,6 +71,7 @@ public class MovieDetailActivity extends AppCompatActivity {
         Configuration.getInstance().load(this, PreferenceManager.getDefaultSharedPreferences(this));
 
         setContentView(R.layout.activity_movie_detail);
+        SystemBarInsets.applyToRoot(findViewById(android.R.id.content));
 
         SessionManager sessionManager = new SessionManager();
         userId = sessionManager.getCurrentUserId();

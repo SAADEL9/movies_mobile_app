@@ -28,6 +28,7 @@ public class WatchlistActivity extends AppCompatActivity {
     protected void onCreate(Bundle savedInstanceState) {
         super.onCreate(savedInstanceState);
         setContentView(R.layout.activity_watchlist);
+        SystemBarInsets.applyToRootWithoutBottom(findViewById(android.R.id.content));
 
         SessionManager sessionManager = new SessionManager();
         userId = sessionManager.getCurrentUserId();

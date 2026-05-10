@@ -57,6 +57,7 @@ public class MainActivity extends AppCompatActivity implements MovieAdapter.OnMo
         }
         userId = sessionManager.getCurrentUserId();
         setContentView(R.layout.activity_main);
+        SystemBarInsets.applyToRootWithoutBottom(findViewById(android.R.id.content));
 
         getWindow().setSoftInputMode(WindowManager.LayoutParams.SOFT_INPUT_STATE_ALWAYS_HIDDEN);
         toolbar = findViewById(R.id.toolbar);

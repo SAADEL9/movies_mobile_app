@@ -20,6 +20,7 @@ public class LoginActivity extends AppCompatActivity {
     protected void onCreate(Bundle savedInstanceState) {
         super.onCreate(savedInstanceState);
         setContentView(R.layout.activity_login);
+        SystemBarInsets.applyToRoot(findViewById(android.R.id.content));
         findViewById(android.R.id.content).startAnimation(AnimationUtils.loadAnimation(this, R.anim.fade_in));
 
         etEmail = findViewById(R.id.et_email);
