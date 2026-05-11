@@ -10,10 +10,12 @@ import android.widget.ImageView;
 import android.widget.TextView;
 import android.view.Menu;
 import android.view.MenuItem;
+import android.view.View;
 import androidx.annotation.NonNull;
 import androidx.appcompat.app.AppCompatActivity;
 import androidx.appcompat.widget.Toolbar;
 import androidx.core.app.ActivityCompat;
+import androidx.recyclerview.widget.RecyclerView;
 import com.bumptech.glide.Glide;
 import com.google.android.material.button.MaterialButton;
 import com.google.android.material.snackbar.Snackbar;
@@ -33,6 +35,15 @@ import org.osmdroid.views.MapView;
 import org.osmdroid.views.overlay.Marker;
 import org.osmdroid.views.overlay.mylocation.GpsMyLocationProvider;
 import org.osmdroid.views.overlay.mylocation.MyLocationNewOverlay;
+import com.saad.moviessaad.adapter.CastAdapter;
+import com.saad.moviessaad.api.SupabaseApiClient;
+import com.saad.moviessaad.api.SupabaseDbService;
+import com.saad.moviessaad.model.CastMember;
+import com.saad.moviessaad.model.CreditsResponse;
+import com.saad.moviessaad.model.CrewMember;
+import com.saad.moviessaad.model.UserRating;
+import com.saad.moviessaad.model.WatchedItem;
+import java.util.ArrayList;
 import java.util.List;
 import retrofit2.Call;
 import retrofit2.Callback;
@@ -60,8 +71,13 @@ public class MovieDetailActivity extends AppCompatActivity {
     private boolean isBookmarked;
     private boolean isWatched;
     private String userId;
+    private String userToken;
     private ImageView btnHeart;
     private MaterialButton btnMarkWatched;
+    private List<ImageView> ratingStars;
+    private float userPersonalRating = 0;
+    private SupabaseDbService supabaseDbService;
+    private CastAdapter castAdapter;
 
     @Override
     protected void onCreate(Bundle savedInstanceState) {
@@ -75,11 +91,13 @@ public class MovieDetailActivity extends AppCompatActivity {
 
         SessionManager sessionManager = new SessionManager();
         userId = sessionManager.getCurrentUserId();
+        userToken = sessionManager.getToken();
         if (userId == null) {
             startActivity(new Intent(this, LoginActivity.class));
             finish();
             return;
         }
+        supabaseDbService = SupabaseApiClient.getClient().create(SupabaseDbService.class);
         readIntentData();
 
         Toolbar toolbar = findViewById(R.id.toolbar);
@@ -97,6 +115,9 @@ public class MovieDetailActivity extends AppCompatActivity {
         btnHeart = findViewById(R.id.btn_heart);
         btnMarkWatched = findViewById(R.id.btn_mark_watched);
 
+        setupRatingStars();
+        setupCastRecyclerView();
+        
         // Affichage des informations
         titleTextView.setText(movieTitle);
         releaseDateTextView.setText(getString(R.string.release_format, releaseDate));
@@ -118,6 +139,7 @@ public class MovieDetailActivity extends AppCompatActivity {
         fusedLocationClient = LocationServices.getFusedLocationProviderClient(this);
         checkLocationPermission();
         fetchMovieTrailer();
+        fetchMovieCredits();
 
         btnPlayTrailer.setOnClickListener(v -> {
             if (youtubeKey != null) {
@@ -132,6 +154,130 @@ public class MovieDetailActivity extends AppCompatActivity {
         btnMarkWatched.setOnClickListener(v -> toggleWatchedStatus());
 
         checkWatchlistStatus();
+        fetchWatchedStatus();
+        fetchUserRating();
+    }
+
+    private void setupCastRecyclerView() {
+        RecyclerView recyclerCast = findViewById(R.id.recycler_cast);
+        castAdapter = new CastAdapter(this);
+        recyclerCast.setAdapter(castAdapter);
+    }
+
+    private void fetchMovieCredits() {
+        ApiService apiService = ApiClient.getClient().create(ApiService.class);
+        apiService.getCredits(movieId, ApiConstants.API_KEY).enqueue(new Callback<CreditsResponse>() {
+            @Override
+            public void onResponse(Call<CreditsResponse> call, Response<CreditsResponse> response) {
+                if (response.isSuccessful() && response.body() != null) {
+                    updateCreditsUI(response.body());
+                }
+            }
+
+            @Override
+            public void onFailure(Call<CreditsResponse> call, Throwable t) {}
+        });
+    }
+
+    private void updateCreditsUI(CreditsResponse credits) {
+        // Update Director
+        for (CrewMember member : credits.getCrew()) {
+            if ("Director".equalsIgnoreCase(member.getJob())) {
+                findViewById(R.id.director_container).setVisibility(View.VISIBLE);
+                ((TextView) findViewById(R.id.director_name)).setText(member.getName());
+                ImageView directorImage = findViewById(R.id.director_image);
+                Glide.with(this)
+                        .load("https://image.tmdb.org/t/p/w185" + member.getProfilePath())
+                        .circleCrop()
+                        .placeholder(R.drawable.ic_avatar_placeholder)
+                        .into(directorImage);
+                break;
+            }
+        }
+
+        // Update Cast (first 10)
+        List<CastMember> cast = credits.getCast();
+        if (cast != null) {
+            List<CastMember> topCast = cast.subList(0, Math.min(cast.size(), 10));
+            castAdapter.setCastList(topCast);
+        }
+    }
+
+    private void setupRatingStars() {
+        ratingStars = new ArrayList<>();
+        ratingStars.add(findViewById(R.id.star1));
+        ratingStars.add(findViewById(R.id.star2));
+        ratingStars.add(findViewById(R.id.star3));
+        ratingStars.add(findViewById(R.id.star4));
+        ratingStars.add(findViewById(R.id.star5));
+
+        for (int i = 0; i < ratingStars.size(); i++) {
+            final int starIndex = i + 1;
+            ratingStars.get(i).setOnClickListener(v -> submitPersonalRating(starIndex));
+        }
+    }
+
+    private void fetchUserRating() {
+        supabaseDbService.getUserRating("Bearer " + userToken, SupabaseApiClient.SUPABASE_KEY, userId, "eq." + movieId).enqueue(new Callback<List<UserRating>>() {
+            @Override
+            public void onResponse(Call<List<UserRating>> call, Response<List<UserRating>> response) {
+                if (response.isSuccessful() && response.body() != null && !response.body().isEmpty()) {
+                    userPersonalRating = response.body().get(0).getRating();
+                    updateRatingStarsUI();
+                }
+            }
+            @Override
+            public void onFailure(Call<List<UserRating>> call, Throwable t) {}
+        });
+    }
+
+    private void updateRatingStarsUI() {
+        for (int i = 0; i < ratingStars.size(); i++) {
+            if (i < userPersonalRating) {
+                ratingStars.get(i).setColorFilter(getColor(R.color.rating_gold));
+            } else {
+                ratingStars.get(i).setColorFilter(getColor(R.color.rating_gray));
+            }
+        }
+    }
+
+    private void submitPersonalRating(int stars) {
+        UserRating ratingObj = new UserRating(userId, movieId, stars);
+        supabaseDbService.submitRating("Bearer " + userToken, SupabaseApiClient.SUPABASE_KEY, "resolution=merge-duplicates", ratingObj).enqueue(new Callback<Void>() {
+            @Override
+            public void onResponse(Call<Void> call, Response<Void> response) {
+                if (response.isSuccessful()) {
+                    userPersonalRating = stars;
+                    updateRatingStarsUI();
+                    showSnack("You rated this " + stars + " stars", R.color.colorSuccess);
+                    
+                    // Animate selected star
+                    ratingStars.get(stars - 1).animate().scaleX(1.3f).scaleY(1.3f).setDuration(200).withEndAction(() -> 
+                        ratingStars.get(stars - 1).animate().scaleX(1.0f).scaleY(1.0f).setDuration(200)
+                    );
+                } else {
+                    showSnack("Failed to save rating", R.color.colorError);
+                }
+            }
+            @Override
+            public void onFailure(Call<Void> call, Throwable t) {
+                showSnack("Connection error", R.color.colorError);
+            }
+        });
+    }
+
+    private void fetchWatchedStatus() {
+        supabaseDbService.checkWatched("Bearer " + userToken, SupabaseApiClient.SUPABASE_KEY, userId, "eq." + movieId).enqueue(new Callback<List<WatchedItem>>() {
+            @Override
+            public void onResponse(Call<List<WatchedItem>> call, Response<List<WatchedItem>> response) {
+                if (response.isSuccessful() && response.body() != null) {
+                    isWatched = !response.body().isEmpty();
+                    updateWatchedButton();
+                }
+            }
+            @Override
+            public void onFailure(Call<List<WatchedItem>> call, Throwable t) {}
+        });
     }
 
     private void readIntentData() {
@@ -181,11 +327,11 @@ public class MovieDetailActivity extends AppCompatActivity {
         if (btnMarkWatched == null) return;
         if (isWatched) {
             btnMarkWatched.setText("Watched");
-            btnMarkWatched.setIconResource(R.drawable.ic_watched);
+            btnMarkWatched.setIconResource(R.drawable.ic_eye_open);
             btnMarkWatched.setAlpha(0.6f);
         } else {
             btnMarkWatched.setText("Mark as Watched");
-            btnMarkWatched.setIconResource(R.drawable.ic_watched);
+            btnMarkWatched.setIconResource(R.drawable.ic_eye_outline);
             btnMarkWatched.setAlpha(1.0f);
         }
     }
@@ -195,9 +341,7 @@ public class MovieDetailActivity extends AppCompatActivity {
             @Override
             public void onSuccess(boolean isInWatchlist, boolean watched) {
                 isBookmarked = isInWatchlist;
-                isWatched = watched;
                 updateHeartIcon();
-                updateWatchedButton();
             }
 
             @Override
@@ -213,9 +357,7 @@ public class MovieDetailActivity extends AppCompatActivity {
                 @Override
                 public void onSuccess() {
                     isBookmarked = false;
-                    isWatched = false;
                     updateHeartIcon();
-                    updateWatchedButton();
                     showSnack("Removed from Watchlist", R.color.colorMuted);
                 }
 
@@ -242,40 +384,38 @@ public class MovieDetailActivity extends AppCompatActivity {
     }
 
     private void toggleWatchedStatus() {
-        if (!isBookmarked) {
-            // Automatically add to watchlist if marking as watched
-            SupabaseService.INSTANCE.upsertWatchlistItem(userId, movieId, movieTitle, posterPath, rating, new SupabaseService.ActionCallback() {
+        if (isWatched) {
+            supabaseDbService.removeWatched("Bearer " + userToken, SupabaseApiClient.SUPABASE_KEY, userId, "eq." + movieId).enqueue(new Callback<Void>() {
                 @Override
-                public void onSuccess() {
-                    isBookmarked = true;
-                    updateHeartIcon();
-                    updateWatchedInDatabase(!isWatched);
+                public void onResponse(Call<Void> call, Response<Void> response) {
+                    if (response.isSuccessful()) {
+                        isWatched = false;
+                        updateWatchedButton();
+                        showSnack("Removed from Watched", R.color.colorMuted);
+                    }
                 }
-
                 @Override
-                public void onError(String message) {
-                    showSnack("Error: " + message, R.color.colorError);
+                public void onFailure(Call<Void> call, Throwable t) {
+                    showSnack("Error: " + t.getMessage(), R.color.colorError);
                 }
             });
         } else {
-            updateWatchedInDatabase(!isWatched);
+            WatchedItem item = new WatchedItem(userId, movieId, movieTitle, posterPath, (float) rating);
+            supabaseDbService.addWatched("Bearer " + userToken, SupabaseApiClient.SUPABASE_KEY, "return=minimal", item).enqueue(new Callback<Void>() {
+                @Override
+                public void onResponse(Call<Void> call, Response<Void> response) {
+                    if (response.isSuccessful()) {
+                        isWatched = true;
+                        updateWatchedButton();
+                        showSnack("Marked as watched", R.color.colorSuccess);
+                    }
+                }
+                @Override
+                public void onFailure(Call<Void> call, Throwable t) {
+                    showSnack("Error: " + t.getMessage(), R.color.colorError);
+                }
+            });
         }
-    }
-
-    private void updateWatchedInDatabase(boolean newStatus) {
-        SupabaseService.INSTANCE.updateWatchlistWatchedStatus(userId, movieId, newStatus, new SupabaseService.ActionCallback() {
-            @Override
-            public void onSuccess() {
-                isWatched = newStatus;
-                updateWatchedButton();
-                showSnack(isWatched ? "✓ Marked as Watched" : "Unmarked as Watched", R.color.colorSuccess);
-            }
-
-            @Override
-            public void onError(String message) {
-                showSnack("Error: " + message, R.color.colorError);
-            }
-        });
     }
 
     /**

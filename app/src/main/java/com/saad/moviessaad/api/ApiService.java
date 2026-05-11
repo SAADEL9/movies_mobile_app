@@ -1,5 +1,6 @@
 package com.saad.moviessaad.api;
 
+import com.saad.moviessaad.model.CreditsResponse;
 import com.saad.moviessaad.model.MovieResponse;
 import com.saad.moviessaad.model.VideoResponse;
 import retrofit2.Call;
@@ -52,4 +53,7 @@ public interface ApiService {
 
     @GET("tv/{series_id}/videos")
     Call<VideoResponse> getSeriesVideos(@Path("series_id") int id, @Query("api_key") String apiKey);
+
+    @GET("movie/{movie_id}/credits")
+    Call<CreditsResponse> getCredits(@Path("movie_id") int id, @Query("api_key") String apiKey);
 }

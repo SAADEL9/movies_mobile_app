@@ -115,6 +115,16 @@
                 android:layout_marginTop="24dp"
                 android:text="@string/edit_profile" />
 
+            <com.google.android.material.button.MaterialButton
+                android:id="@+id/btn_watched"
+                style="@style/Widget.Movies.Button.Primary"
+                android:layout_width="match_parent"
+                android:layout_height="52dp"
+                android:layout_marginTop="12dp"
+                android:text="Watched Movies"
+                app:icon="@drawable/ic_eye_open"
+                app:iconTint="@color/colorTextPrimary" />
+
             <!-- Edit fields -->
             <com.google.android.material.textfield.TextInputLayout
                 android:id="@+id/til_username"

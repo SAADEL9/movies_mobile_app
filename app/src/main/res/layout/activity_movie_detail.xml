@@ -175,6 +175,67 @@
             android:paddingStart="22dp"
             android:paddingEnd="22dp"
             android:paddingTop="12dp"
+            android:text="Your Rating"
+            android:textStyle="bold"
+            android:textSize="18sp"
+            android:textColor="@color/colorTextPrimary" />
+
+        <LinearLayout
+            android:id="@+id/layout_rating_stars"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:orientation="horizontal"
+            android:paddingStart="22dp"
+            android:paddingEnd="22dp"
+            android:paddingTop="8dp"
+            android:paddingBottom="12dp">
+
+            <ImageView
+                android:id="@+id/star1"
+                android:layout_width="32dp"
+                android:layout_height="32dp"
+                android:src="@drawable/ic_bot_star"
+                app:tint="@color/rating_gray" />
+
+            <ImageView
+                android:id="@+id/star2"
+                android:layout_width="32dp"
+                android:layout_height="32dp"
+                android:layout_marginStart="8dp"
+                android:src="@drawable/ic_bot_star"
+                app:tint="@color/rating_gray" />
+
+            <ImageView
+                android:id="@+id/star3"
+                android:layout_width="32dp"
+                android:layout_height="32dp"
+                android:layout_marginStart="8dp"
+                android:src="@drawable/ic_bot_star"
+                app:tint="@color/rating_gray" />
+
+            <ImageView
+                android:id="@+id/star4"
+                android:layout_width="32dp"
+                android:layout_height="32dp"
+                android:layout_marginStart="8dp"
+                android:src="@drawable/ic_bot_star"
+                app:tint="@color/rating_gray" />
+
+            <ImageView
+                android:id="@+id/star5"
+                android:layout_width="32dp"
+                android:layout_height="32dp"
+                android:layout_marginStart="8dp"
+                android:src="@drawable/ic_bot_star"
+                app:tint="@color/rating_gray" />
+        </LinearLayout>
+
+        <TextView
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:paddingStart="22dp"
+            android:paddingEnd="22dp"
+            android:paddingTop="12dp"
             android:text="@string/overview"
             android:textStyle="bold"
             android:textSize="18sp"
@@ -191,6 +252,84 @@
             android:textSize="15sp"
             android:textColor="@color/colorTextSecondary"
             android:lineSpacingExtra="5dp" />
+
+        <!-- Director Section -->
+        <TextView
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:paddingStart="22dp"
+            android:paddingEnd="22dp"
+            android:paddingTop="8dp"
+            android:text="Director"
+            android:textStyle="bold"
+            android:textSize="18sp"
+            android:textColor="@color/colorTextPrimary" />
+
+        <LinearLayout
+            android:id="@+id/director_container"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:orientation="horizontal"
+            android:gravity="center_vertical"
+            android:paddingStart="22dp"
+            android:paddingEnd="22dp"
+            android:paddingTop="12dp"
+            android:paddingBottom="12dp"
+            android:visibility="gone">
+
+            <ImageView
+                android:id="@+id/director_image"
+                android:layout_width="64dp"
+                android:layout_height="64dp"
+                android:scaleType="centerCrop"
+                android:contentDescription="Director" />
+
+            <LinearLayout
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:orientation="vertical"
+                android:layout_marginStart="16dp">
+
+                <TextView
+                    android:id="@+id/director_name"
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:textColor="@color/colorTextPrimary"
+                    android:textSize="16sp"
+                    android:textStyle="bold" />
+
+                <TextView
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:text="Director"
+                    android:textColor="@color/colorTextSecondary"
+                    android:textSize="14sp" />
+            </LinearLayout>
+        </LinearLayout>
+
+        <!-- Cast Section -->
+        <TextView
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:paddingStart="22dp"
+            android:paddingEnd="22dp"
+            android:paddingTop="12dp"
+            android:text="Cast"
+            android:textStyle="bold"
+            android:textSize="18sp"
+            android:textColor="@color/colorTextPrimary" />
+
+        <androidx.recyclerview.widget.RecyclerView
+            android:id="@+id/recycler_cast"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:clipToPadding="false"
+            android:orientation="horizontal"
+            android:paddingStart="14dp"
+            android:paddingEnd="14dp"
+            android:paddingTop="8dp"
+            android:paddingBottom="12dp"
+            app:layoutManager="androidx.recyclerview.widget.LinearLayoutManager" />
 
         <TextView
             android:layout_width="match_parent"

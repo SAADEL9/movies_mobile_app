@@ -90,6 +90,8 @@ object SupabaseService {
 
     fun getCurrentUserId(): String? = SupabaseClientProvider.client.auth.currentUserOrNull()?.id
 
+    fun getAccessToken(): String? = SupabaseClientProvider.client.auth.currentSessionOrNull()?.accessToken
+
     fun isLoggedIn(): Boolean = getCurrentUserId() != null
 
     fun loadDisplayName(userId: String, callback: DisplayNameCallback) {

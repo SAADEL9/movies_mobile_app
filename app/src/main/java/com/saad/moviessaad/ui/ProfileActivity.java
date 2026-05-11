@@ -32,7 +32,7 @@ public class ProfileActivity extends AppCompatActivity {
     private TextView tvDisplayName, tvDisplayEmail, tvDisplayBio, tvChangeAvatar;
     private TextInputEditText etUsername, etEmail, etBio;
     private TextInputLayout tilUsername, tilEmail, tilBio;
-    private MaterialButton btnEdit, btnSave, btnCancelEdit, btnSignOut;
+    private MaterialButton btnEdit, btnSave, btnCancelEdit, btnSignOut, btnWatched;
     private FrameLayout loadingOverlay;
     private NestedScrollView profileScroll;
     private String userId;
@@ -84,6 +84,7 @@ public class ProfileActivity extends AppCompatActivity {
         btnSave = findViewById(R.id.btn_save);
         btnCancelEdit = findViewById(R.id.btn_cancel_edit);
         btnSignOut = findViewById(R.id.btn_sign_out);
+        btnWatched = findViewById(R.id.btn_watched);
         loadingOverlay = findViewById(R.id.loading_overlay);
 
         profileAvatar.setOnClickListener(v -> {
@@ -98,6 +99,10 @@ public class ProfileActivity extends AppCompatActivity {
             setEditing(false);
         });
         btnSignOut.setOnClickListener(v -> signOut());
+        btnWatched.setOnClickListener(v -> {
+            startActivity(new Intent(this, WatchedActivity.class));
+            overridePendingTransition(R.anim.fade_in, R.anim.fade_out);
+        });
         applySystemBarPadding();
         setEditing(false);
     }
@@ -163,6 +168,7 @@ public class ProfileActivity extends AppCompatActivity {
         int viewVisibility = editing ? View.GONE : View.VISIBLE;
         tvDisplayBio.setVisibility(viewVisibility);
         btnEdit.setVisibility(viewVisibility);
+        btnWatched.setVisibility(viewVisibility);
         tvChangeAvatar.setVisibility(editVisibility);
         tilUsername.setVisibility(editVisibility);
         tilEmail.setVisibility(editVisibility);

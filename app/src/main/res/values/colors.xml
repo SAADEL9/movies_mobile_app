@@ -23,4 +23,6 @@
     <color name="colorGold">#FFD166</color>
     <color name="colorStroke">#2B3140</color>
     <color name="colorScrim">#9907080D</color>
+    <color name="rating_gold">#FFD700</color>
+    <color name="rating_gray">#3A3A4A</color>
 </resources>

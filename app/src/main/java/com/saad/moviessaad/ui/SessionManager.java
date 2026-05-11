@@ -8,6 +8,10 @@ public class SessionManager {
         return SupabaseService.INSTANCE.getCurrentUserId();
     }
 
+    public String getToken() {
+        return SupabaseService.INSTANCE.getAccessToken();
+    }
+
     public boolean isLoggedIn() {
         return SupabaseService.INSTANCE.isLoggedIn();
     }
