@@ -56,16 +56,12 @@ public class AvatarChatActivity extends AppCompatActivity implements TextToSpeec
     private static final int REQUEST_RECORD_AUDIO = 4401;
     private static final String UTTERANCE_ID = "cinebot_utterance";
 
-    // ─── Avatar scale & camera tuning constants ───────────────────────────────
-    // Increase AVATAR_SCALE to make the avatar bigger, decrease to make smaller.
-    private static final float AVATAR_SCALE       = 0.4f;
-    // AVATAR_Y: negative moves avatar downward so the head sits in the center.
-    private static final float AVATAR_Y           = 0.0f;
-    // CAMERA_Y: positive tilts camera upward (looks at face/chest level).
-    private static final float CAMERA_Y           = 0.8f;
-    // CAMERA_Z: distance from avatar — increase to zoom out, decrease to zoom in.
-    private static final float CAMERA_Z           = 3.5f;
-    // ──────────────────────────────────────────────────────────────────────────
+    private static final float AVATAR_HEIGHT = 1.8f;
+    private static final float AVATAR_POS_Y = -0.9f;
+    private static final float CAM_POS_X = 0.0f;
+    private static final float CAM_POS_Y = 0.9f;
+    private static final float CAM_POS_Z = 3.2f;
+    private static final float CAM_LOOKAT_Y = 0.5f;
 
     private enum AvatarState {
         IDLE,
@@ -212,6 +208,7 @@ public class AvatarChatActivity extends AppCompatActivity implements TextToSpeec
             sceneContainer.addView(sceneView, new FrameLayout.LayoutParams(
                     FrameLayout.LayoutParams.MATCH_PARENT,
                     FrameLayout.LayoutParams.MATCH_PARENT));
+            disableSceneGestures();
             avatarFallbackView.setVisibility(View.GONE);
             avatar3dEnabled = true;
         } catch (Throwable t) {
@@ -219,6 +216,18 @@ public class AvatarChatActivity extends AppCompatActivity implements TextToSpeec
             avatar3dEnabled = false;
             avatarFallbackView.setVisibility(View.VISIBLE);
             subtitleView.setText("CineBot is ready, but the 3D avatar could not start on this device.");
+        }
+    }
+
+    private void disableSceneGestures() {
+        if (sceneView == null) return;
+
+        try {
+            sceneView.getClass()
+                    .getMethod("setCameraManipulator", Object.class)
+                    .invoke(sceneView, new Object[]{null});
+        } catch (Throwable ignored) {
+            sceneView.setOnTouchListener((view, event) -> true);
         }
     }
 
@@ -369,23 +378,16 @@ public class AvatarChatActivity extends AppCompatActivity implements TextToSpeec
     // ─── Opening flow ─────────────────────────────────────────────────────────
 
     private void startOpeningFlow() {
-        // Step 1: load idle avatar immediately
         loadAvatarModel("avatar.glb");
 
-        // Step 2: start waving after 500ms
-        handler.postDelayed(() -> {
-            setAvatarState(AvatarState.WAVING);
-        }, 500);
+        handler.postDelayed(() ->
+                setAvatarState(AvatarState.WAVING), 600);
 
-        // Step 3: go back to idle after waving
-        handler.postDelayed(() -> {
-            setAvatarState(AvatarState.IDLE);
-        }, 3500);
+        handler.postDelayed(() ->
+                setAvatarState(AvatarState.IDLE), 3600);
 
-        // Step 4: speak intro after waving finishes
-        handler.postDelayed(() -> {
-            speak(introText);
-        }, 3600);
+        handler.postDelayed(() ->
+                speak(introText), 3700);
     }
 
     // ─── Avatar state machine ─────────────────────────────────────────────────
@@ -430,14 +432,17 @@ public class AvatarChatActivity extends AppCompatActivity implements TextToSpeec
                     .createModelInstance(assetName, resourceFileName -> null);
 
             // ── Position tuning ──────────────────────────────────────────────
-            // AVATAR_SCALE : overall size of the avatar
-            // AVATAR_Y     : vertical offset (negative = move down so head centers)
-            currentModelNode = new ModelNode(
-                    modelInstance,
-                    true,
-                    AVATAR_SCALE,
-                    new Float3(0.0f, AVATAR_Y, 0.0f)
-            );
+            try {
+                currentModelNode = new ModelNode(
+                        modelInstance,
+                        true,
+                        AVATAR_HEIGHT,
+                        new Float3(0.0f, AVATAR_POS_Y, 0.0f)
+                );
+            } catch (Throwable t) {
+                currentModelNode = new ModelNode(modelInstance, true, null, null);
+                currentModelNode.setPosition(new Float3(0.0f, AVATAR_POS_Y, 0.0f));
+            }
 
             // Rotate 180° so avatar faces the camera
             currentModelNode.setRotation(new Float3(0.0f, 180.0f, 0.0f));
@@ -445,12 +450,7 @@ public class AvatarChatActivity extends AppCompatActivity implements TextToSpeec
             sceneView.addChildNode(currentModelNode);
 
             // ── Camera tuning ────────────────────────────────────────────────
-            // CAMERA_Y : height of camera (positive = look at chest/face level)
-            // CAMERA_Z : distance from avatar (larger = more zoomed out)
-            if (sceneView.getCameraNode() != null) {
-                sceneView.getCameraNode().setPosition(new Float3(0.0f, CAMERA_Y, CAMERA_Z));
-                sceneView.getCameraNode().setRotation(new Float3(-10.0f, 0.0f, 0.0f));
-            }
+            frameAvatarCamera();
 
         } catch (Throwable t) {
             // Graceful degradation: show message but keep app running
@@ -461,6 +461,25 @@ public class AvatarChatActivity extends AppCompatActivity implements TextToSpeec
     }
 
     // ─── Voice input ──────────────────────────────────────────────────────────
+
+    private void frameAvatarCamera() {
+        handler.postDelayed(() -> {
+            if (sceneView == null) return;
+            if (sceneView.getCameraNode() != null) {
+                sceneView.getCameraNode().setPosition(new Float3(CAM_POS_X, CAM_POS_Y, CAM_POS_Z));
+                try {
+                    sceneView.getCameraNode().lookAt(
+                            new Float3(0.0f, CAM_LOOKAT_Y, 0.0f),
+                            new Float3(0.0f, 1.0f, 0.0f),
+                            false,
+                            0.0f
+                    );
+                } catch (Throwable t) {
+                    sceneView.getCameraNode().setRotation(new Float3(-15.0f, 0.0f, 0.0f));
+                }
+            }
+        }, 100);
+    }
 
     private void startListening() {
         if (waitingForOllama) return;
