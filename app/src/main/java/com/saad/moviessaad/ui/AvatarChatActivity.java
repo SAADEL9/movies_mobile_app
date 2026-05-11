@@ -59,9 +59,9 @@ public class AvatarChatActivity extends AppCompatActivity implements TextToSpeec
     private static final float AVATAR_HEIGHT = 1.8f;
     private static final float AVATAR_POS_Y = -0.9f;
     private static final float CAM_POS_X = 0.0f;
-    private static final float CAM_POS_Y = 0.9f;
-    private static final float CAM_POS_Z = 3.2f;
-    private static final float CAM_LOOKAT_Y = 0.5f;
+    private static final float CAM_POS_Y     = 0.9f;
+    private static final float CAM_POS_Z     = 2.2f;   // pulled back = full body visible
+    private static final float CAM_LOOKAT_Y  = 0.9f;
 
     private enum AvatarState {
         IDLE,
@@ -190,6 +190,10 @@ public class AvatarChatActivity extends AppCompatActivity implements TextToSpeec
         starterChipsScroll.setVisibility(View.GONE);
         messageInput.clearFocus();
         avatarStage.requestFocus();
+        
+        if (state != AvatarState.LISTENING && state != AvatarState.TALKING) {
+            subtitleView.setText(introText);
+        }
     }
 
     // ─── SceneView / 3D avatar ────────────────────────────────────────────────
@@ -220,15 +224,7 @@ public class AvatarChatActivity extends AppCompatActivity implements TextToSpeec
     }
 
     private void disableSceneGestures() {
-        if (sceneView == null) return;
-
-        try {
-            sceneView.getClass()
-                    .getMethod("setCameraManipulator", Object.class)
-                    .invoke(sceneView, new Object[]{null});
-        } catch (Throwable ignored) {
-            sceneView.setOnTouchListener((view, event) -> true);
-        }
+        // Gestures enabled intentionally — user can rotate the avatar
     }
 
     private boolean canUse3dAvatar() {
@@ -506,7 +502,9 @@ public class AvatarChatActivity extends AppCompatActivity implements TextToSpeec
         intent.putExtra(RecognizerIntent.EXTRA_PARTIAL_RESULTS, false);
 
         setAvatarState(AvatarState.LISTENING);
-        subtitleView.setText("Listening...");
+        if (chatTabs.getSelectedTabPosition() == 1) {
+            subtitleView.setText("Listening...");
+        }
         speechRecognizer.startListening(intent);
     }
 
@@ -524,7 +522,6 @@ public class AvatarChatActivity extends AppCompatActivity implements TextToSpeec
 
         messageInput.setText("");
         starterChipsScroll.setVisibility(View.GONE);
-        subtitleView.setText(trimmed);
 
         chatMessages.add(new ChatMessage(trimmed, true));
         adapter.notifyItemInserted(chatMessages.size() - 1);
@@ -549,7 +546,6 @@ public class AvatarChatActivity extends AppCompatActivity implements TextToSpeec
                 chatMessages.add(new ChatMessage(answer, false));
                 adapter.notifyItemInserted(chatMessages.size() - 1);
                 recyclerView.scrollToPosition(chatMessages.size() - 1);
-                subtitleView.setText(answer);
                 speak(answer);
             }
 
@@ -566,7 +562,7 @@ public class AvatarChatActivity extends AppCompatActivity implements TextToSpeec
         chatMessages.add(new ChatMessage(message, false));
         adapter.notifyItemInserted(chatMessages.size() - 1);
         recyclerView.scrollToPosition(chatMessages.size() - 1);
-        subtitleView.setText(message);
+
         setAvatarState(AvatarState.IDLE);
     }
 
@@ -587,8 +583,10 @@ public class AvatarChatActivity extends AppCompatActivity implements TextToSpeec
             pendingSpeechText = text;
             return;
         }
-        setAvatarState(AvatarState.TALKING);
-        textToSpeech.speak(text, TextToSpeech.QUEUE_FLUSH, null, UTTERANCE_ID);
+        runOnUiThread(() -> setAvatarState(AvatarState.TALKING));
+        handler.postDelayed(() -> {
+            textToSpeech.speak(text, TextToSpeech.QUEUE_FLUSH, null, UTTERANCE_ID);
+        }, 300);
     }
 
     @Override
@@ -597,16 +595,22 @@ public class AvatarChatActivity extends AppCompatActivity implements TextToSpeec
             ttsReady = true;
             textToSpeech.setLanguage(Locale.US);
             selectMaleVoice();
-            textToSpeech.setSpeechRate(0.9f);
-            textToSpeech.setPitch(0.78f);
+            textToSpeech.setSpeechRate(0.85f);
+            textToSpeech.setPitch(0.7f);
             textToSpeech.setOnUtteranceProgressListener(new UtteranceProgressListener() {
                 @Override
                 public void onStart(String utteranceId) {
-                    runOnUiThread(() -> setAvatarState(AvatarState.TALKING));
+                    runOnUiThread(() -> {
+                        if (state != AvatarState.TALKING) {
+                            setAvatarState(AvatarState.TALKING);
+                        }
+                    });
                 }
                 @Override
                 public void onDone(String utteranceId) {
-                    runOnUiThread(() -> setAvatarState(AvatarState.IDLE));
+                    runOnUiThread(() -> {
+                        handler.postDelayed(() -> setAvatarState(AvatarState.IDLE), 400);
+                    });
                 }
                 @Override
                 public void onError(String utteranceId) {
@@ -629,27 +633,37 @@ public class AvatarChatActivity extends AppCompatActivity implements TextToSpeec
         Set<Voice> voices = textToSpeech.getVoices();
         if (voices == null || voices.isEmpty()) return;
 
-        Voice fallback = null;
+        Voice bestMaleOffline = null;
+        Voice bestMaleOnline = null;
+        Voice anyEnglish = null;
+
         for (Voice voice : voices) {
             Locale locale = voice.getLocale();
             if (locale == null || !Locale.US.getLanguage().equals(locale.getLanguage())) continue;
-            if (fallback == null) fallback = voice;
+
+            if (anyEnglish == null) anyEnglish = voice;
 
             String name = voice.getName() == null ? "" : voice.getName().toLowerCase(Locale.US);
-            Set<String> features = voice.getFeatures() == null
-                    ? new HashSet<>()
-                    : voice.getFeatures();
-            String featureText = features.toString().toLowerCase(Locale.US);
-            boolean looksMale = (name.contains("male") && !name.contains("female"))
-                    || featureText.contains("male");
-            if (looksMale && !voice.isNetworkConnectionRequired()) {
-                textToSpeech.setVoice(voice);
-                return;
+
+            // Patterns: en-us-x-sfg, en-us-x-iom, male-1, male-2, #male
+            boolean isMale = (name.contains("male") && !name.contains("female"))
+                    || name.contains("male-1") || name.contains("male-2")
+                    || name.contains("#male")
+                    || name.contains("guy") || name.contains("man") || name.contains("masculine")
+                    || name.contains("en-us-x-sfg") || name.contains("en-us-x-iom");
+
+            if (isMale) {
+                if (!voice.isNetworkConnectionRequired()) {
+                    if (bestMaleOffline == null) bestMaleOffline = voice;
+                } else {
+                    if (bestMaleOnline == null) bestMaleOnline = voice;
+                }
             }
         }
 
-        if (fallback != null) {
-            textToSpeech.setVoice(fallback);
+        Voice chosen = (bestMaleOffline != null) ? bestMaleOffline : (bestMaleOnline != null ? bestMaleOnline : anyEnglish);
+        if (chosen != null) {
+            textToSpeech.setVoice(chosen);
         }
     }
 
