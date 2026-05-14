@@ -16,6 +16,7 @@ import android.speech.SpeechRecognizer;
 import android.speech.tts.TextToSpeech;
 import android.speech.tts.UtteranceProgressListener;
 import android.speech.tts.Voice;
+import android.util.Log;
 import android.view.Gravity;
 import android.view.Menu;
 import android.view.MenuItem;
@@ -34,6 +35,7 @@ import androidx.core.app.ActivityCompat;
 import androidx.core.content.ContextCompat;
 import androidx.recyclerview.widget.LinearLayoutManager;
 import androidx.recyclerview.widget.RecyclerView;
+import com.google.android.filament.Box;
 import com.google.android.material.chip.Chip;
 import com.google.android.material.chip.ChipGroup;
 import com.google.android.material.tabs.TabLayout;
@@ -42,7 +44,6 @@ import com.saad.moviessaad.api.MovieAiClient;
 import com.saad.moviessaad.api.OllamaMessage;
 import com.saad.moviessaad.model.ChatMessage;
 import java.util.ArrayList;
-import java.util.HashSet;
 import java.util.List;
 import java.util.Locale;
 import java.util.Set;
@@ -53,21 +54,24 @@ import dev.romainguy.kotlin.math.Float3;
 
 public class AvatarChatActivity extends AppCompatActivity implements TextToSpeech.OnInitListener {
 
+    private static final String TAG = "AVATAR";
     private static final int REQUEST_RECORD_AUDIO = 4401;
     private static final String UTTERANCE_ID = "cinebot_utterance";
 
-    private static final float AVATAR_HEIGHT = 1.8f;
-    private static final float AVATAR_POS_Y = -0.9f;
-    private static final float CAM_POS_X = 0.0f;
-    private static final float CAM_POS_Y     = 0.9f;
-    private static final float CAM_POS_Z     = 2.2f;   // pulled back = full body visible
-    private static final float CAM_LOOKAT_Y  = 0.9f;
+    // ── Tuning constants ─────────────────────────────────────────────────────
+    // Desired avatar height in real-world meters
+    private static final float DESIRED_HEIGHT = 1.8f;
+    // Camera distance multiplier (increase = more zoomed out)
+    private static final float CAMERA_DISTANCE_FACTOR = 2.2f;
+    // Camera height as fraction of avatar height (0=feet, 1=head)
+    private static final float CAMERA_HEIGHT_FACTOR = 0.45f;
+    // Point camera looks at as fraction of avatar height
+    private static final float CAMERA_LOOKAT_FACTOR = 0.45f;
+    // Ms to wait before reading bounding box
+    private static final int BOUNDS_READ_DELAY_MS = 400;
 
     private enum AvatarState {
-        IDLE,
-        WAVING,
-        LISTENING,
-        TALKING
+        IDLE, WAVING, LISTENING, TALKING
     }
 
     private SceneView sceneView;
@@ -84,13 +88,16 @@ public class AvatarChatActivity extends AppCompatActivity implements TextToSpeec
     private View conversationPanel;
     private View inputContainer;
     private TabLayout chatTabs;
+
     private final Handler handler = new Handler(Looper.getMainLooper());
     private final List<OllamaMessage> conversationHistory = new ArrayList<>();
     private final List<ChatMessage> chatMessages = new ArrayList<>();
+
     private TextToSpeech textToSpeech;
     private SpeechRecognizer speechRecognizer;
     private ObjectAnimator listeningAnimator;
     private ModelNode currentModelNode;
+
     private AvatarState state = AvatarState.IDLE;
     private String mode = "general";
     private String introText;
@@ -98,6 +105,13 @@ public class AvatarChatActivity extends AppCompatActivity implements TextToSpeec
     private String pendingSpeechText;
     private boolean waitingForOllama;
     private boolean avatar3dEnabled = true;
+
+    // Cached framing from avatar.glb — reused for animation-only GLBs
+    // (waving.glb & talking.glb have no mesh so bounding box = zero)
+    private float cachedScale = -1f;
+    private float cachedYPos  = -999f;
+
+    // ─── Lifecycle ────────────────────────────────────────────────────────────
 
     @Override
     protected void onCreate(Bundle savedInstanceState) {
@@ -113,17 +127,17 @@ public class AvatarChatActivity extends AppCompatActivity implements TextToSpeec
             getSupportActionBar().setTitle("CineBot");
         }
 
-        sceneContainer    = findViewById(R.id.scene_container);
-        avatarStage       = findViewById(R.id.avatar_stage);
-        recyclerView      = findViewById(R.id.recycler_chat);
-        listeningRing     = findViewById(R.id.listening_ring);
-        subtitleView      = findViewById(R.id.tv_subtitle);
-        messageInput      = findViewById(R.id.et_message);
-        starterChips      = findViewById(R.id.starter_chips);
-        starterChipsScroll= findViewById(R.id.starter_chips_scroll);
-        conversationPanel = findViewById(R.id.conversation_panel);
-        inputContainer    = findViewById(R.id.input_container);
-        chatTabs          = findViewById(R.id.chat_tabs);
+        sceneContainer     = findViewById(R.id.scene_container);
+        avatarStage        = findViewById(R.id.avatar_stage);
+        recyclerView       = findViewById(R.id.recycler_chat);
+        listeningRing      = findViewById(R.id.listening_ring);
+        subtitleView       = findViewById(R.id.tv_subtitle);
+        messageInput       = findViewById(R.id.et_message);
+        starterChips       = findViewById(R.id.starter_chips);
+        starterChipsScroll = findViewById(R.id.starter_chips_scroll);
+        conversationPanel  = findViewById(R.id.conversation_panel);
+        inputContainer     = findViewById(R.id.input_container);
+        chatTabs           = findViewById(R.id.chat_tabs);
 
         if (canUseTextToSpeech()) {
             textToSpeech = new TextToSpeech(this, this);
@@ -142,6 +156,17 @@ public class AvatarChatActivity extends AppCompatActivity implements TextToSpeec
         startOpeningFlow();
     }
 
+    @Override
+    protected void onDestroy() {
+        handler.removeCallbacksAndMessages(null);
+        if (speechRecognizer != null) speechRecognizer.destroy();
+        if (textToSpeech != null) {
+            textToSpeech.stop();
+            textToSpeech.shutdown();
+        }
+        super.onDestroy();
+    }
+
     // ─── Chat list ────────────────────────────────────────────────────────────
 
     private void setupChatList() {
@@ -156,7 +181,6 @@ public class AvatarChatActivity extends AppCompatActivity implements TextToSpeec
         chatTabs.addTab(chatTabs.newTab().setText("Chat"));
         chatTabs.addTab(chatTabs.newTab().setText("3D Avatar"));
 
-        // Default to avatar tab
         TabLayout.Tab avatarTab = chatTabs.getTabAt(1);
         if (avatarTab != null) avatarTab.select();
         showAvatarTab();
@@ -190,13 +214,12 @@ public class AvatarChatActivity extends AppCompatActivity implements TextToSpeec
         starterChipsScroll.setVisibility(View.GONE);
         messageInput.clearFocus();
         avatarStage.requestFocus();
-        
         if (state != AvatarState.LISTENING && state != AvatarState.TALKING) {
             subtitleView.setText(introText);
         }
     }
 
-    // ─── SceneView / 3D avatar ────────────────────────────────────────────────
+    // ─── SceneView ────────────────────────────────────────────────────────────
 
     private void setupSceneView() {
         addAvatarFallback();
@@ -209,22 +232,25 @@ public class AvatarChatActivity extends AppCompatActivity implements TextToSpeec
 
         try {
             sceneView = new SceneView(this);
+
+            // Return true to fully consume ALL touch events so
+            // SceneView's internal gesture detector never fires
+            // and never resets the camera back to the feet position
+            sceneView.setOnTouchListener((v, event) -> true);
+
             sceneContainer.addView(sceneView, new FrameLayout.LayoutParams(
                     FrameLayout.LayoutParams.MATCH_PARENT,
                     FrameLayout.LayoutParams.MATCH_PARENT));
-            disableSceneGestures();
+
             avatarFallbackView.setVisibility(View.GONE);
             avatar3dEnabled = true;
+
         } catch (Throwable t) {
             sceneView = null;
             avatar3dEnabled = false;
             avatarFallbackView.setVisibility(View.VISIBLE);
             subtitleView.setText("CineBot is ready, but the 3D avatar could not start on this device.");
         }
-    }
-
-    private void disableSceneGestures() {
-        // Gestures enabled intentionally — user can rotate the avatar
     }
 
     private boolean canUse3dAvatar() {
@@ -268,7 +294,7 @@ public class AvatarChatActivity extends AppCompatActivity implements TextToSpeec
                 FrameLayout.LayoutParams.MATCH_PARENT));
     }
 
-    // ─── Mode (general vs movie) ──────────────────────────────────────────────
+    // ─── Mode ─────────────────────────────────────────────────────────────────
 
     private void setupMode() {
         Intent intent = getIntent();
@@ -318,7 +344,7 @@ public class AvatarChatActivity extends AppCompatActivity implements TextToSpeec
         }
     }
 
-    // ─── Input (send + mic) ───────────────────────────────────────────────────
+    // ─── Input ────────────────────────────────────────────────────────────────
 
     private void setupInput() {
         findViewById(R.id.btn_send).setOnClickListener(v ->
@@ -376,14 +402,14 @@ public class AvatarChatActivity extends AppCompatActivity implements TextToSpeec
     private void startOpeningFlow() {
         loadAvatarModel("avatar.glb");
 
-        handler.postDelayed(() ->
-                setAvatarState(AvatarState.WAVING), 600);
+        // Wave after avatar is fully framed (give extra time for framing)
+        handler.postDelayed(() -> setAvatarState(AvatarState.WAVING), 1200);
 
-        handler.postDelayed(() ->
-                setAvatarState(AvatarState.IDLE), 3600);
+        // Back to idle
+        handler.postDelayed(() -> setAvatarState(AvatarState.IDLE), 4500);
 
-        handler.postDelayed(() ->
-                speak(introText), 3700);
+        // Speak intro
+        handler.postDelayed(() -> speak(introText), 4600);
     }
 
     // ─── Avatar state machine ─────────────────────────────────────────────────
@@ -402,8 +428,8 @@ public class AvatarChatActivity extends AppCompatActivity implements TextToSpeec
                 loadAvatarModel("waving.glb");
                 break;
             case LISTENING:
+                // Keep current model — just show pulsing ring
                 startListeningPulse();
-                // keep current model — just show the ring
                 break;
             case TALKING:
                 stopListeningPulse();
@@ -412,70 +438,176 @@ public class AvatarChatActivity extends AppCompatActivity implements TextToSpeec
         }
     }
 
-    // ─── Load GLB model ───────────────────────────────────────────────────────
+    // ─── Load GLB + auto-frame ────────────────────────────────────────────────
 
     private void loadAvatarModel(String assetName) {
         if (!avatar3dEnabled || sceneView == null) return;
 
         try {
-            // Remove previous node cleanly
+            // Remove old node
             if (currentModelNode != null) {
                 sceneView.removeChildNode(currentModelNode);
                 currentModelNode = null;
             }
 
-            FilamentInstance modelInstance = sceneView.getModelLoader()
+            FilamentInstance modelInstance = sceneView
+                    .getModelLoader()
                     .createModelInstance(assetName, resourceFileName -> null);
 
-            // ── Position tuning ──────────────────────────────────────────────
-            try {
-                currentModelNode = new ModelNode(
-                        modelInstance,
-                        true,
-                        AVATAR_HEIGHT,
-                        new Float3(0.0f, AVATAR_POS_Y, 0.0f)
-                );
-            } catch (Throwable t) {
-                currentModelNode = new ModelNode(modelInstance, true, null, null);
-                currentModelNode.setPosition(new Float3(0.0f, AVATAR_POS_Y, 0.0f));
+            if (modelInstance == null) {
+                Log.e(TAG, "ModelInstance null for: " + assetName);
+                return;
             }
 
-            // Rotate 180° so avatar faces the camera
+            // Create node — no manual scale yet, computed from bounding box
+            // SceneView 2.0.3 requires: FilamentInstance, autoAnimate, scale, position
+            // Pass scale=1.0f and position=origin — we override them after bounds are read
+            currentModelNode = new ModelNode(modelInstance, true, 1.0f, new Float3(0f, 0f, 0f));
+
+            // Rotate 180° on Y so avatar faces the camera
+            // Mixamo/Avaturn avatars export facing -Z, camera is at +Z
             currentModelNode.setRotation(new Float3(0.0f, 180.0f, 0.0f));
 
             sceneView.addChildNode(currentModelNode);
 
-            // ── Camera tuning ────────────────────────────────────────────────
-            frameAvatarCamera();
+            // Keep a reference to detect stale callbacks
+            final ModelNode nodeRef = currentModelNode;
+
+            // Schedule bounding-box read after model finishes loading
+            handler.postDelayed(
+                    () -> frameAvatar(nodeRef, assetName, 1),
+                    BOUNDS_READ_DELAY_MS);
 
         } catch (Throwable t) {
-            // Graceful degradation: show message but keep app running
-            runOnUiThread(() ->
-                    subtitleView.setText("CineBot could not load the 3D model.")
-            );
+            Log.e(TAG, "loadAvatarModel error: " + t.getMessage());
+            runOnUiThread(() -> subtitleView.setText("Could not load 3D model."));
         }
     }
 
-    // ─── Voice input ──────────────────────────────────────────────────────────
+    /**
+     * Reads the model bounding box and sets scale + position so the full
+     * avatar body is visible.
+     *
+     * KEY INSIGHT from Logcat:
+     *   avatar.glb  → height=1.87  (has mesh, bounds work fine)
+     *   waving.glb  → height=0.000038  (animation-only, NO mesh)
+     *   talking.glb → height=0.000038  (animation-only, NO mesh)
+     *
+     * Solution: cache scale+position from avatar.glb and reuse for animations.
+     */
+    private void frameAvatar(ModelNode nodeRef, String assetName, int attempt) {
+        if (nodeRef != currentModelNode || sceneView == null) return;
 
-    private void frameAvatarCamera() {
-        handler.postDelayed(() -> {
-            if (sceneView == null) return;
-            if (sceneView.getCameraNode() != null) {
-                sceneView.getCameraNode().setPosition(new Float3(CAM_POS_X, CAM_POS_Y, CAM_POS_Z));
-                try {
-                    sceneView.getCameraNode().lookAt(
-                            new Float3(0.0f, CAM_LOOKAT_Y, 0.0f),
-                            new Float3(0.0f, 1.0f, 0.0f),
-                            false,
-                            0.0f
-                    );
-                } catch (Throwable t) {
-                    sceneView.getCameraNode().setRotation(new Float3(-15.0f, 0.0f, 0.0f));
-                }
+        // Animation-only GLBs have no mesh so bounding box = ~0
+        // Reuse cached values computed from avatar.glb instead
+        if (!assetName.equals("avatar.glb") && cachedScale > 0f) {
+            Log.d(TAG, assetName + " is animation-only → reusing cached scale="
+                    + cachedScale + " yPos=" + cachedYPos);
+            nodeRef.setWorldScale(new Float3(cachedScale, cachedScale, cachedScale));
+            nodeRef.setWorldPosition(new Float3(0f, cachedYPos, 0f));
+            positionCamera();
+            return;
+        }
+
+        try {
+            Box boundingBox = nodeRef.getBoundingBox();
+            if (boundingBox == null) throw new IllegalStateException("null bounding box");
+
+            float[] half   = boundingBox.getHalfExtent();
+            float[] center = boundingBox.getCenter();
+
+            float modelHeight  = half[1] * 2f;
+            float modelCenterY = center[1];
+
+            Log.d(TAG, assetName + " attempt=" + attempt
+                    + " halfY=" + half[1]
+                    + " centerY=" + modelCenterY
+                    + " height=" + modelHeight);
+
+            if (modelHeight < 0.001f) {
+                throw new IllegalStateException("height too small: " + modelHeight);
             }
-        }, 100);
+
+            // Scale so avatar is exactly DESIRED_HEIGHT meters tall
+            float scale = DESIRED_HEIGHT / modelHeight;
+            nodeRef.setWorldScale(new Float3(scale, scale, scale));
+
+            // Shift so feet sit at y=0
+            // modelCenterY is center of model in model space
+            // after scaling: center at modelCenterY*scale
+            // we want feet at 0 so push down by modelCenterY*scale - halfHeight
+            float yPos = -(modelCenterY * scale) + (DESIRED_HEIGHT / 2f) - DESIRED_HEIGHT;
+            nodeRef.setWorldPosition(new Float3(0f, yPos, 0f));
+
+            // Cache for animation GLBs
+            cachedScale = scale;
+            cachedYPos  = yPos;
+
+            positionCamera();
+            Log.d(TAG, "Framed OK scale=" + scale + " yPos=" + yPos + " (cached)");
+
+        } catch (Throwable t) {
+            Log.w(TAG, "frameAvatar attempt " + attempt + ": " + t.getMessage());
+
+            if (attempt < 4) {
+                long retryDelay = 250L * attempt;
+                handler.postDelayed(
+                        () -> frameAvatar(nodeRef, assetName, attempt + 1),
+                        retryDelay);
+            } else {
+                Log.e(TAG, "All attempts failed — applying fallback");
+                applyFallback(nodeRef);
+            }
+        }
     }
+
+    /**
+     * Places the camera so the full avatar (feet to head) is visible.
+     * Camera sits at (0, camY, camZ) and tilts down to look at avatar center.
+     */
+    private void positionCamera() {
+        if (sceneView == null || sceneView.getCameraNode() == null) return;
+
+        float camY    = DESIRED_HEIGHT * CAMERA_HEIGHT_FACTOR;  // ~0.81m
+        float camZ    = DESIRED_HEIGHT * CAMERA_DISTANCE_FACTOR; // ~3.96m
+        float lookAtY = DESIRED_HEIGHT * CAMERA_LOOKAT_FACTOR;  // ~0.81m
+
+        // Place camera behind and slightly above avatar center
+        sceneView.getCameraNode().setWorldPosition(new Float3(0f, camY, camZ));
+
+        // Compute downward pitch angle from camera to avatar center
+        // Vector from camera(0, camY, camZ) to target(0, lookAtY, 0):
+        // direction = (0, lookAtY - camY, -camZ)
+        float deltaY = lookAtY - camY; // negative = target is below camera
+        // atan2(opposite, adjacent) = atan2(-deltaY, camZ)
+        // negative because we pitch DOWN (negative X rotation in OpenGL)
+        float pitchRad = (float) Math.atan2(-deltaY, camZ);
+        float pitchDeg = (float) Math.toDegrees(pitchRad);
+
+        sceneView.getCameraNode().setRotation(new Float3(pitchDeg, 0f, 0f));
+
+        Log.d(TAG, "Camera Y=" + camY + " Z=" + camZ
+                + " lookAtY=" + lookAtY + " pitch=" + pitchDeg);
+    }
+
+    /**
+     * Safe fallback when bounding box never becomes available.
+     * Works for typical Mixamo exports (centimeter scale).
+     */
+    private void applyFallback(ModelNode nodeRef) {
+        if (nodeRef == null || nodeRef != currentModelNode) return;
+
+        // Mixamo default: 1 unit = 1 cm, human ~180 cm tall
+        // So scale 0.01 makes avatar ~1.8 m
+        nodeRef.setWorldScale(new Float3(0.01f, 0.01f, 0.01f));
+        // Origin at feet, shift down half-height so it centers nicely
+        nodeRef.setWorldPosition(new Float3(0f, -0.9f, 0f));
+
+        positionCamera();
+        Log.d(TAG, "Fallback applied");
+    }
+
+    // ─── Voice input ──────────────────────────────────────────────────────────
 
     private void startListening() {
         if (waitingForOllama) return;
@@ -514,7 +646,7 @@ public class AvatarChatActivity extends AppCompatActivity implements TextToSpeec
         }
     }
 
-    // ─── Send message to Ollama ───────────────────────────────────────────────
+    // ─── Send message ─────────────────────────────────────────────────────────
 
     private void sendMessage(String text) {
         String trimmed = (text == null) ? "" : text.trim();
@@ -531,7 +663,6 @@ public class AvatarChatActivity extends AppCompatActivity implements TextToSpeec
         waitingForOllama = true;
         setAvatarState(AvatarState.IDLE);
 
-        // Show typing indicator
         chatMessages.add(ChatMessage.typingIndicator());
         adapter.notifyItemInserted(chatMessages.size() - 1);
         recyclerView.scrollToPosition(chatMessages.size() - 1);
@@ -562,7 +693,6 @@ public class AvatarChatActivity extends AppCompatActivity implements TextToSpeec
         chatMessages.add(new ChatMessage(message, false));
         adapter.notifyItemInserted(chatMessages.size() - 1);
         recyclerView.scrollToPosition(chatMessages.size() - 1);
-
         setAvatarState(AvatarState.IDLE);
     }
 
@@ -574,7 +704,7 @@ public class AvatarChatActivity extends AppCompatActivity implements TextToSpeec
         }
     }
 
-    // ─── Text To Speech ───────────────────────────────────────────────────────
+    // ─── TTS ──────────────────────────────────────────────────────────────────
 
     private void speak(String text) {
         if (text == null || text.trim().isEmpty()) return;
@@ -584,9 +714,8 @@ public class AvatarChatActivity extends AppCompatActivity implements TextToSpeec
             return;
         }
         runOnUiThread(() -> setAvatarState(AvatarState.TALKING));
-        handler.postDelayed(() -> {
-            textToSpeech.speak(text, TextToSpeech.QUEUE_FLUSH, null, UTTERANCE_ID);
-        }, 300);
+        handler.postDelayed(() ->
+                textToSpeech.speak(text, TextToSpeech.QUEUE_FLUSH, null, UTTERANCE_ID), 300);
     }
 
     @Override
@@ -595,22 +724,20 @@ public class AvatarChatActivity extends AppCompatActivity implements TextToSpeec
             ttsReady = true;
             textToSpeech.setLanguage(Locale.US);
             selectMaleVoice();
-            textToSpeech.setSpeechRate(0.85f);
-            textToSpeech.setPitch(0.7f);
+            // Male voice tuning: Lower pitch and slightly slower rate
+            textToSpeech.setSpeechRate(0.88f);
+            textToSpeech.setPitch(0.75f);
             textToSpeech.setOnUtteranceProgressListener(new UtteranceProgressListener() {
                 @Override
                 public void onStart(String utteranceId) {
                     runOnUiThread(() -> {
-                        if (state != AvatarState.TALKING) {
-                            setAvatarState(AvatarState.TALKING);
-                        }
+                        if (state != AvatarState.TALKING) setAvatarState(AvatarState.TALKING);
                     });
                 }
                 @Override
                 public void onDone(String utteranceId) {
-                    runOnUiThread(() -> {
-                        handler.postDelayed(() -> setAvatarState(AvatarState.IDLE), 400);
-                    });
+                    runOnUiThread(() ->
+                            handler.postDelayed(() -> setAvatarState(AvatarState.IDLE), 400));
                 }
                 @Override
                 public void onError(String utteranceId) {
@@ -618,7 +745,6 @@ public class AvatarChatActivity extends AppCompatActivity implements TextToSpeec
                 }
             });
 
-            // Speak any text that arrived before TTS was ready
             if (pendingSpeechText != null) {
                 String text = pendingSpeechText;
                 pendingSpeechText = null;
@@ -633,41 +759,55 @@ public class AvatarChatActivity extends AppCompatActivity implements TextToSpeec
         Set<Voice> voices = textToSpeech.getVoices();
         if (voices == null || voices.isEmpty()) return;
 
-        Voice bestMaleOffline = null;
-        Voice bestMaleOnline = null;
-        Voice anyEnglish = null;
+        Voice bestMale = null;
 
         for (Voice voice : voices) {
             Locale locale = voice.getLocale();
-            if (locale == null || !Locale.US.getLanguage().equals(locale.getLanguage())) continue;
+            if (locale == null || !locale.getLanguage().startsWith("en")) continue;
 
-            if (anyEnglish == null) anyEnglish = voice;
-
-            String name = voice.getName() == null ? "" : voice.getName().toLowerCase(Locale.US);
-
-            // Patterns: en-us-x-sfg, en-us-x-iom, male-1, male-2, #male
+            String name = (voice.getName() == null) ? "" : voice.getName().toLowerCase(Locale.US);
+            
+            // Comprehensive male voice detection keywords
+            // Google: iom, iol, iog, sfg
+            // Samsung/Generic: male, guy, man, masculine, #male
             boolean isMale = (name.contains("male") && !name.contains("female"))
-                    || name.contains("male-1") || name.contains("male-2")
+                    || name.contains("guy")
+                    || name.contains("man")
+                    || name.contains("masculine")
                     || name.contains("#male")
-                    || name.contains("guy") || name.contains("man") || name.contains("masculine")
-                    || name.contains("en-us-x-sfg") || name.contains("en-us-x-iom");
+                    || name.contains("iom") 
+                    || name.contains("iol") 
+                    || name.contains("iog") 
+                    || name.contains("sfg");
 
             if (isMale) {
-                if (!voice.isNetworkConnectionRequired()) {
-                    if (bestMaleOffline == null) bestMaleOffline = voice;
+                // Priority logic:
+                // 1. Prefer offline voices (isNetworkConnectionRequired == false)
+                // 2. Prefer US English (locale country == "US")
+                boolean isUS = locale.getCountry().equalsIgnoreCase("US");
+                boolean isOffline = !voice.isNetworkConnectionRequired();
+
+                if (bestMale == null) {
+                    bestMale = voice;
                 } else {
-                    if (bestMaleOnline == null) bestMaleOnline = voice;
+                    boolean currentIsOffline = !bestMale.isNetworkConnectionRequired();
+                    boolean currentIsUS = bestMale.getLocale().getCountry().equalsIgnoreCase("US");
+
+                    if (isOffline && !currentIsOffline) {
+                        bestMale = voice;
+                    } else if (isOffline == currentIsOffline && isUS && !currentIsUS) {
+                        bestMale = voice;
+                    }
                 }
             }
         }
 
-        Voice chosen = (bestMaleOffline != null) ? bestMaleOffline : (bestMaleOnline != null ? bestMaleOnline : anyEnglish);
-        if (chosen != null) {
-            textToSpeech.setVoice(chosen);
+        if (bestMale != null) {
+            textToSpeech.setVoice(bestMale);
         }
     }
 
-    // ─── Listening pulse animation ────────────────────────────────────────────
+    // ─── Listening pulse ──────────────────────────────────────────────────────
 
     private void startListeningPulse() {
         if (listeningAnimator == null) {
@@ -729,18 +869,5 @@ public class AvatarChatActivity extends AppCompatActivity implements TextToSpeec
                 && grantResults[0] == PackageManager.PERMISSION_GRANTED) {
             startListening();
         }
-    }
-
-    // ─── Lifecycle ────────────────────────────────────────────────────────────
-
-    @Override
-    protected void onDestroy() {
-        handler.removeCallbacksAndMessages(null);
-        if (speechRecognizer != null) speechRecognizer.destroy();
-        if (textToSpeech != null) {
-            textToSpeech.stop();
-            textToSpeech.shutdown();
-        }
-        super.onDestroy();
     }
 }
