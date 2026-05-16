@@ -182,6 +182,20 @@
         app:layout_constraintStart_toStartOf="parent"
         app:layout_constraintEnd_toEndOf="parent" />
 
+    <!-- Mini FAB above the chat FAB — launches the full-screen 3D avatar display -->
+    <com.google.android.material.floatingactionbutton.FloatingActionButton
+        android:id="@+id/fab_avatar_display"
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:layout_marginEnd="20dp"
+        android:layout_marginBottom="8dp"
+        android:src="@drawable/ic_bot_star"
+        app:backgroundTint="@color/colorGold"
+        app:tint="#FFFFFF"
+        app:fabSize="mini"
+        app:layout_constraintBottom_toTopOf="@id/fab_chat"
+        app:layout_constraintEnd_toEndOf="parent" />
+
     <com.google.android.material.floatingactionbutton.FloatingActionButton
         android:id="@+id/fab_chat"
         android:layout_width="wrap_content"

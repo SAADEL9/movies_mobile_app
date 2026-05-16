@@ -59,17 +59,15 @@ public class AvatarChatActivity extends AppCompatActivity implements TextToSpeec
     private static final String UTTERANCE_ID = "cinebot_utterance";
 
     // ── Tuning constants ─────────────────────────────────────────────────────
-    // Desired avatar height in real-world meters
-    private static final float DESIRED_HEIGHT = 1.8f;
-    // Camera distance multiplier (increase = more zoomed out)
-    private static final float CAMERA_DISTANCE_FACTOR = 2.2f;
-    // Camera height as fraction of avatar height (0=feet, 1=head)
-    private static final float CAMERA_HEIGHT_FACTOR = 0.45f;
-    // Point camera looks at as fraction of avatar height
-    private static final float CAMERA_LOOKAT_FACTOR = 0.45f;
+    private static final float DESIRED_HEIGHT = 0.75f;
+    private static final float CAMERA_DISTANCE_FACTOR = 0.75f;
+    private static final float CAMERA_HEIGHT_FACTOR = 0.55f;
+    private static final float CAMERA_LOOKAT_FACTOR = 0.70f;
     // Ms to wait before reading bounding box
     private static final int BOUNDS_READ_DELAY_MS = 400;
-
+    private static final float AVATAR_X = 0f;
+    private static final float AVATAR_Y = -0.5f;
+    private static final float AVATAR_Z = 0f;
     private enum AvatarState {
         IDLE, WAVING, LISTENING, TALKING
     }
@@ -439,155 +437,175 @@ public class AvatarChatActivity extends AppCompatActivity implements TextToSpeec
     }
 
     // ─── Load GLB + auto-frame ────────────────────────────────────────────────
-
     private void loadAvatarModel(String assetName) {
         if (!avatar3dEnabled || sceneView == null) return;
 
         try {
-            // Remove old node
-            if (currentModelNode != null) {
-                sceneView.removeChildNode(currentModelNode);
-                currentModelNode = null;
-            }
-
             FilamentInstance modelInstance = sceneView
                     .getModelLoader()
                     .createModelInstance(assetName, resourceFileName -> null);
 
             if (modelInstance == null) {
-                Log.e(TAG, "ModelInstance null for: " + assetName);
+                Log.e(TAG, "ModelInstance null: " + assetName);
                 return;
             }
 
-            // Create node — no manual scale yet, computed from bounding box
-            // SceneView 2.0.3 requires: FilamentInstance, autoAnimate, scale, position
-            // Pass scale=1.0f and position=origin — we override them after bounds are read
-            currentModelNode = new ModelNode(modelInstance, true, 1.0f, new Float3(0f, 0f, 0f));
+            ModelNode newNode = new ModelNode(
+                    modelInstance,
+                    true,
+                    1.0f,
+                    new Float3(0f, 0f, 0f)
+            );
 
-            // Rotate 180° on Y so avatar faces the camera
-            // Mixamo/Avaturn avatars export facing -Z, camera is at +Z
-            currentModelNode.setRotation(new Float3(0.0f, 180.0f, 0.0f));
+            ModelNode oldNode = currentModelNode;
 
-            sceneView.addChildNode(currentModelNode);
+            // For animations: keep exact same size and fixed position
+            if (!assetName.equals("avatar.glb") && oldNode != null) {
 
-            // Keep a reference to detect stale callbacks
-            final ModelNode nodeRef = currentModelNode;
+                Float3 currentScale = oldNode.getWorldScale();
+                Float3 currentPosition = oldNode.getWorldPosition();
 
-            // Schedule bounding-box read after model finishes loading
+                // Boost animation scale
+                float animationScaleMultiplier = 80.0f;
+
+// talking avatar too big → reduce it
+                if (assetName.equals("talking.glb")) {
+                    animationScaleMultiplier = 65.0f;
+                }
+
+// waving avatar too small → increase it
+                if (assetName.equals("waving.glb")) {
+                    animationScaleMultiplier = 90.0f;
+                }
+
+                newNode.setWorldScale(
+                        new Float3(
+                                currentScale.getX() * animationScaleMultiplier,
+                                currentScale.getY() * animationScaleMultiplier,
+                                currentScale.getZ() * animationScaleMultiplier
+                        )
+                );
+
+                float animationYOffset = 0f;
+
+// talking animation appears too high
+                if (assetName.equals("talking.glb")) {
+                    animationYOffset = -0.5f;
+                }
+
+// waving animation stays normal
+                if (assetName.equals("waving.glb")) {
+                    animationYOffset = 0f;
+                }
+
+                newNode.setWorldPosition(
+                        new Float3(
+                                currentPosition.getX(),
+                                currentPosition.getY() + animationYOffset,
+                                currentPosition.getZ()
+                        )
+                );
+
+                sceneView.addChildNode(newNode);
+
+                sceneView.removeChildNode(oldNode);
+
+                currentModelNode = newNode;
+
+                Log.d(TAG, "Animation scale fixed");
+
+                return;
+            }
+
+            sceneView.addChildNode(newNode);
+
+            if (oldNode != null) {
+                sceneView.removeChildNode(oldNode);
+            }
+
+            currentModelNode = newNode;
+
             handler.postDelayed(
-                    () -> frameAvatar(nodeRef, assetName, 1),
-                    BOUNDS_READ_DELAY_MS);
+                    () -> frameAvatar(newNode, assetName, 1),
+                    BOUNDS_READ_DELAY_MS
+            );
 
-        } catch (Throwable t) {
-            Log.e(TAG, "loadAvatarModel error: " + t.getMessage());
-            runOnUiThread(() -> subtitleView.setText("Could not load 3D model."));
+        } catch (Exception e) {
+            Log.e(TAG, "loadAvatarModel failed: " + e.getMessage());
         }
     }
-
-    /**
-     * Reads the model bounding box and sets scale + position so the full
-     * avatar body is visible.
-     *
-     * KEY INSIGHT from Logcat:
-     *   avatar.glb  → height=1.87  (has mesh, bounds work fine)
-     *   waving.glb  → height=0.000038  (animation-only, NO mesh)
-     *   talking.glb → height=0.000038  (animation-only, NO mesh)
-     *
-     * Solution: cache scale+position from avatar.glb and reuse for animations.
-     */
     private void frameAvatar(ModelNode nodeRef, String assetName, int attempt) {
         if (nodeRef != currentModelNode || sceneView == null) return;
 
-        // Animation-only GLBs have no mesh so bounding box = ~0
-        // Reuse cached values computed from avatar.glb instead
-        if (!assetName.equals("avatar.glb") && cachedScale > 0f) {
-            Log.d(TAG, assetName + " is animation-only → reusing cached scale="
-                    + cachedScale + " yPos=" + cachedYPos);
-            nodeRef.setWorldScale(new Float3(cachedScale, cachedScale, cachedScale));
-            nodeRef.setWorldPosition(new Float3(0f, cachedYPos, 0f));
-            positionCamera();
-            return;
-        }
-
         try {
             Box boundingBox = nodeRef.getBoundingBox();
-            if (boundingBox == null) throw new IllegalStateException("null bounding box");
 
-            float[] half   = boundingBox.getHalfExtent();
-            float[] center = boundingBox.getCenter();
-
-            float modelHeight  = half[1] * 2f;
-            float modelCenterY = center[1];
-
-            Log.d(TAG, assetName + " attempt=" + attempt
-                    + " halfY=" + half[1]
-                    + " centerY=" + modelCenterY
-                    + " height=" + modelHeight);
-
-            if (modelHeight < 0.001f) {
-                throw new IllegalStateException("height too small: " + modelHeight);
+            if (boundingBox == null) {
+                throw new IllegalStateException("Bounding box null");
             }
 
-            // Scale so avatar is exactly DESIRED_HEIGHT meters tall
+            float[] half = boundingBox.getHalfExtent();
+            float modelHeight = half[1] * 2f;
+
+            if (modelHeight <= 0.001f) {
+                throw new IllegalStateException("Invalid model height");
+            }
+
             float scale = DESIRED_HEIGHT / modelHeight;
-            nodeRef.setWorldScale(new Float3(scale, scale, scale));
 
-            // Shift so feet sit at y=0
-            // modelCenterY is center of model in model space
-            // after scaling: center at modelCenterY*scale
-            // we want feet at 0 so push down by modelCenterY*scale - halfHeight
-            float yPos = -(modelCenterY * scale) + (DESIRED_HEIGHT / 2f) - DESIRED_HEIGHT;
-            nodeRef.setWorldPosition(new Float3(0f, yPos, 0f));
+            nodeRef.setWorldScale(
+                    new Float3(scale, scale, scale)
+            );
 
-            // Cache for animation GLBs
+            // FIXED POSITION
+            nodeRef.setWorldPosition(
+                    new Float3(
+                            AVATAR_X,
+                            AVATAR_Y,
+                            AVATAR_Z
+                    )
+            );
+
             cachedScale = scale;
-            cachedYPos  = yPos;
+            cachedYPos = AVATAR_Y;
 
             positionCamera();
-            Log.d(TAG, "Framed OK scale=" + scale + " yPos=" + yPos + " (cached)");
 
-        } catch (Throwable t) {
-            Log.w(TAG, "frameAvatar attempt " + attempt + ": " + t.getMessage());
+            Log.d(TAG, "Avatar fixed at X=" + AVATAR_X +
+                    " Y=" + AVATAR_Y +
+                    " Z=" + AVATAR_Z);
+
+        } catch (Exception e) {
+            Log.e(TAG, "frameAvatar failed attempt " + attempt);
 
             if (attempt < 4) {
-                long retryDelay = 250L * attempt;
                 handler.postDelayed(
                         () -> frameAvatar(nodeRef, assetName, attempt + 1),
-                        retryDelay);
+                        300
+                );
             } else {
-                Log.e(TAG, "All attempts failed — applying fallback");
                 applyFallback(nodeRef);
             }
         }
     }
 
-    /**
-     * Places the camera so the full avatar (feet to head) is visible.
-     * Camera sits at (0, camY, camZ) and tilts down to look at avatar center.
-     */
     private void positionCamera() {
         if (sceneView == null || sceneView.getCameraNode() == null) return;
 
-        float camY    = DESIRED_HEIGHT * CAMERA_HEIGHT_FACTOR;  // ~0.81m
-        float camZ    = DESIRED_HEIGHT * CAMERA_DISTANCE_FACTOR; // ~3.96m
-        float lookAtY = DESIRED_HEIGHT * CAMERA_LOOKAT_FACTOR;  // ~0.81m
+        float camY    = DESIRED_HEIGHT * CAMERA_HEIGHT_FACTOR;
+        float camZ    = DESIRED_HEIGHT * CAMERA_DISTANCE_FACTOR;
+        float lookAtY = DESIRED_HEIGHT * CAMERA_LOOKAT_FACTOR;
 
-        // Place camera behind and slightly above avatar center
         sceneView.getCameraNode().setWorldPosition(new Float3(0f, camY, camZ));
 
-        // Compute downward pitch angle from camera to avatar center
-        // Vector from camera(0, camY, camZ) to target(0, lookAtY, 0):
-        // direction = (0, lookAtY - camY, -camZ)
-        float deltaY = lookAtY - camY; // negative = target is below camera
-        // atan2(opposite, adjacent) = atan2(-deltaY, camZ)
-        // negative because we pitch DOWN (negative X rotation in OpenGL)
-        float pitchRad = (float) Math.atan2(-deltaY, camZ);
-        float pitchDeg = (float) Math.toDegrees(pitchRad);
-
+        // Positive X rotation = look up in right-handed OpenGL (Rx(θ)·[0,0,-1] = [0,sinθ,-cosθ]).
+        // lookAtY is above camY (face level > camera height) so deltaY > 0 → positive pitch → look up.
+        // The original code negated deltaY, which aimed thea camera at the floor instead of the face.
+        float deltaY   = lookAtY - camY;
+        float pitchDeg = (float) Math.toDegrees(Math.atan2(deltaY, camZ));
         sceneView.getCameraNode().setRotation(new Float3(pitchDeg, 0f, 0f));
 
-        Log.d(TAG, "Camera Y=" + camY + " Z=" + camZ
-                + " lookAtY=" + lookAtY + " pitch=" + pitchDeg);
+        Log.d(TAG, "Camera Y=" + camY + " Z=" + camZ + " lookAtY=" + lookAtY + " pitch=" + pitchDeg);
     }
 
     /**
@@ -595,16 +613,26 @@ public class AvatarChatActivity extends AppCompatActivity implements TextToSpeec
      * Works for typical Mixamo exports (centimeter scale).
      */
     private void applyFallback(ModelNode nodeRef) {
-        if (nodeRef == null || nodeRef != currentModelNode) return;
+        if (nodeRef == null) return;
 
-        // Mixamo default: 1 unit = 1 cm, human ~180 cm tall
-        // So scale 0.01 makes avatar ~1.8 m
-        nodeRef.setWorldScale(new Float3(0.01f, 0.01f, 0.01f));
-        // Origin at feet, shift down half-height so it centers nicely
-        nodeRef.setWorldPosition(new Float3(0f, -0.9f, 0f));
+        nodeRef.setWorldScale(
+                new Float3(0.01f, 0.01f, 0.01f)
+        );
+
+        nodeRef.setWorldPosition(
+                new Float3(
+                        AVATAR_X,
+                        AVATAR_Y,
+                        AVATAR_Z
+                )
+        );
+
+        cachedScale = 0.01f;
+        cachedYPos = AVATAR_Y;
 
         positionCamera();
-        Log.d(TAG, "Fallback applied");
+
+        Log.d(TAG, "Fallback applied with fixed position");
     }
 
     // ─── Voice input ──────────────────────────────────────────────────────────
@@ -726,7 +754,7 @@ public class AvatarChatActivity extends AppCompatActivity implements TextToSpeec
             selectMaleVoice();
             // Male voice tuning: Lower pitch and slightly slower rate
             textToSpeech.setSpeechRate(0.88f);
-            textToSpeech.setPitch(0.75f);
+            textToSpeech.setPitch(0.65f);
             textToSpeech.setOnUtteranceProgressListener(new UtteranceProgressListener() {
                 @Override
                 public void onStart(String utteranceId) {
@@ -766,7 +794,7 @@ public class AvatarChatActivity extends AppCompatActivity implements TextToSpeec
             if (locale == null || !locale.getLanguage().startsWith("en")) continue;
 
             String name = (voice.getName() == null) ? "" : voice.getName().toLowerCase(Locale.US);
-            
+
             // Comprehensive male voice detection keywords
             // Google: iom, iol, iog, sfg
             // Samsung/Generic: male, guy, man, masculine, #male
@@ -775,9 +803,9 @@ public class AvatarChatActivity extends AppCompatActivity implements TextToSpeec
                     || name.contains("man")
                     || name.contains("masculine")
                     || name.contains("#male")
-                    || name.contains("iom") 
-                    || name.contains("iol") 
-                    || name.contains("iog") 
+                    || name.contains("iom")
+                    || name.contains("iol")
+                    || name.contains("iog")
                     || name.contains("sfg");
 
             if (isMale) {
