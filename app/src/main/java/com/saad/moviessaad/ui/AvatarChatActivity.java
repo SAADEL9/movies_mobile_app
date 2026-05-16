@@ -732,7 +732,7 @@ public class AvatarChatActivity extends AppCompatActivity implements TextToSpeec
         }
     }
 
-    // ─── TTS ──────────────────────────────────────────────────────────────────
+
 
     private void speak(String text) {
         if (text == null || text.trim().isEmpty()) return;
@@ -752,9 +752,7 @@ public class AvatarChatActivity extends AppCompatActivity implements TextToSpeec
             ttsReady = true;
             textToSpeech.setLanguage(Locale.US);
             selectMaleVoice();
-            // Male voice tuning: Lower pitch and slightly slower rate
-            textToSpeech.setSpeechRate(0.88f);
-            textToSpeech.setPitch(0.65f);
+
             textToSpeech.setOnUtteranceProgressListener(new UtteranceProgressListener() {
                 @Override
                 public void onStart(String utteranceId) {
@@ -782,56 +780,74 @@ public class AvatarChatActivity extends AppCompatActivity implements TextToSpeec
     }
 
     private void selectMaleVoice() {
-        if (Build.VERSION.SDK_INT < Build.VERSION_CODES.LOLLIPOP || textToSpeech == null) return;
+        if (Build.VERSION.SDK_INT < Build.VERSION_CODES.LOLLIPOP || textToSpeech == null) {
+            return;
+        }
 
         Set<Voice> voices = textToSpeech.getVoices();
-        if (voices == null || voices.isEmpty()) return;
 
-        Voice bestMale = null;
+        if (voices == null || voices.isEmpty()) {
+            Log.d(TAG, "No TTS voices found");
+            return;
+        }
+
+        Voice bestMaleVoice = null;
 
         for (Voice voice : voices) {
+            if (voice == null) continue;
+
             Locale locale = voice.getLocale();
-            if (locale == null || !locale.getLanguage().startsWith("en")) continue;
+            if (locale == null || !locale.getLanguage().equals("en")) {
+                continue;
+            }
 
-            String name = (voice.getName() == null) ? "" : voice.getName().toLowerCase(Locale.US);
+            String name = voice.getName().toLowerCase(Locale.US);
 
-            // Comprehensive male voice detection keywords
-            // Google: iom, iol, iog, sfg
-            // Samsung/Generic: male, guy, man, masculine, #male
-            boolean isMale = (name.contains("male") && !name.contains("female"))
-                    || name.contains("guy")
-                    || name.contains("man")
-                    || name.contains("masculine")
-                    || name.contains("#male")
-                    || name.contains("iom")
-                    || name.contains("iol")
-                    || name.contains("iog")
-                    || name.contains("sfg");
+            Log.d(TAG, "Available voice: " + name);
+
+            // Skip female voices
+            if (name.contains("female") ||
+                    name.contains("woman") ||
+                    name.contains("girl") ||
+                    name.contains("female")) {
+                continue;
+            }
+
+            // Strong male indicators
+            boolean isMale =
+                    name.contains("male") ||
+                            name.contains("man") ||
+                            name.contains("guy") ||
+
+                            // Google male voices
+                            name.contains("en-us-x-iom") ||
+                            name.contains("en-us-x-iol") ||
+                            name.contains("en-us-x-iog") ||
+
+                            // Samsung variants
+                            name.contains("male_") ||
+                            name.contains("masculine");
 
             if (isMale) {
-                // Priority logic:
-                // 1. Prefer offline voices (isNetworkConnectionRequired == false)
-                // 2. Prefer US English (locale country == "US")
-                boolean isUS = locale.getCountry().equalsIgnoreCase("US");
-                boolean isOffline = !voice.isNetworkConnectionRequired();
-
-                if (bestMale == null) {
-                    bestMale = voice;
-                } else {
-                    boolean currentIsOffline = !bestMale.isNetworkConnectionRequired();
-                    boolean currentIsUS = bestMale.getLocale().getCountry().equalsIgnoreCase("US");
-
-                    if (isOffline && !currentIsOffline) {
-                        bestMale = voice;
-                    } else if (isOffline == currentIsOffline && isUS && !currentIsUS) {
-                        bestMale = voice;
-                    }
-                }
+                bestMaleVoice = voice;
+                Log.d(TAG, "Selected male voice: " + name);
+                break;
             }
         }
 
-        if (bestMale != null) {
-            textToSpeech.setVoice(bestMale);
+        if (bestMaleVoice != null) {
+            textToSpeech.setVoice(bestMaleVoice);
+
+            // deeper male sound
+            textToSpeech.setPitch(0.55f);
+            textToSpeech.setSpeechRate(0.90f);
+
+        } else {
+            Log.d(TAG, "No male voice found, using fallback deep settings");
+
+            // fallback if device only has generic voices
+            textToSpeech.setPitch(0.45f);
+            textToSpeech.setSpeechRate(0.85f);
         }
     }
 
