@@ -96,7 +96,8 @@
             android:background="@drawable/bg_avatar_subtitle"
             android:minHeight="74dp"
             android:textColor="@color/colorTextPrimary"
-            android:textSize="16sp" />
+            android:textSize="16sp"
+            android:visibility="gone" />
 
         <HorizontalScrollView
             android:id="@+id/starter_chips_scroll"

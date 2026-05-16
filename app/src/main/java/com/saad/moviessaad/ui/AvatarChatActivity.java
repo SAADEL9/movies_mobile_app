@@ -60,14 +60,14 @@ public class AvatarChatActivity extends AppCompatActivity implements TextToSpeec
 
     // ── Tuning constants ─────────────────────────────────────────────────────
     private static final float DESIRED_HEIGHT = 0.75f;
-    private static final float CAMERA_DISTANCE_FACTOR = 0.75f;
+    private static final float CAMERA_DISTANCE_FACTOR = 4.75f;
     private static final float CAMERA_HEIGHT_FACTOR = 0.55f;
-    private static final float CAMERA_LOOKAT_FACTOR = 0.70f;
+    private static final float CAMERA_LOOKAT_FACTOR = 1.70f;
     // Ms to wait before reading bounding box
     private static final int BOUNDS_READ_DELAY_MS = 400;
     private static final float AVATAR_X = 0f;
-    private static final float AVATAR_Y = -0.5f;
-    private static final float AVATAR_Z = 0f;
+    private static final float AVATAR_Y = -0.6f;
+    private static final float AVATAR_Z = 0.52f;
     private enum AvatarState {
         IDLE, WAVING, LISTENING, TALKING
     }
@@ -208,7 +208,7 @@ public class AvatarChatActivity extends AppCompatActivity implements TextToSpeec
         avatarStage.setVisibility(View.VISIBLE);
         conversationPanel.setVisibility(View.VISIBLE);
         inputContainer.setVisibility(View.VISIBLE);
-        subtitleView.setVisibility(View.VISIBLE);
+        subtitleView.setVisibility(View.GONE);
         starterChipsScroll.setVisibility(View.GONE);
         messageInput.clearFocus();
         avatarStage.requestFocus();
@@ -459,81 +459,64 @@ public class AvatarChatActivity extends AppCompatActivity implements TextToSpeec
 
             ModelNode oldNode = currentModelNode;
 
-            // For animations: keep exact same size and fixed position
-            if (!assetName.equals("avatar.glb") && oldNode != null) {
+            // For animations: use cachedScale as base (never compound old node's scale)
+            if (!assetName.equals("avatar.glb")) {
 
-                Float3 currentScale = oldNode.getWorldScale();
-                Float3 currentPosition = oldNode.getWorldPosition();
-
-                // Boost animation scale
-                float animationScaleMultiplier = 80.0f;
-
-// talking avatar too big → reduce it
-                if (assetName.equals("talking.glb")) {
-                    animationScaleMultiplier = 65.0f;
+                // If cachedScale not ready yet, wait and retry
+                if (cachedScale <= 0) {
+                    Log.w(TAG, "cachedScale not ready, retrying: " + assetName);
+                    handler.postDelayed(() -> loadAvatarModel(assetName), 300);
+                    return;
                 }
 
-// waving avatar too small → increase it
-                if (assetName.equals("waving.glb")) {
-                    animationScaleMultiplier = 90.0f;
-                }
+                float animationScaleMultiplier = 100.0f;
+                if (assetName.equals("talking.glb")) animationScaleMultiplier = 100.0f;
+                if (assetName.equals("waving.glb"))  animationScaleMultiplier = 100.0f;
 
-                newNode.setWorldScale(
-                        new Float3(
-                                currentScale.getX() * animationScaleMultiplier,
-                                currentScale.getY() * animationScaleMultiplier,
-                                currentScale.getZ() * animationScaleMultiplier
-                        )
-                );
+                float s = cachedScale * animationScaleMultiplier;
+                newNode.setWorldScale(new Float3(s, s, s));
 
-                float animationYOffset = 0f;
+                float animationYOffset = 10f;
+                if (assetName.equals("talking.glb")) animationYOffset = 0f;
+                if (assetName.equals("waving.glb"))  animationYOffset = 0f;  // ← move down
 
-// talking animation appears too high
-                if (assetName.equals("talking.glb")) {
-                    animationYOffset = -0.5f;
-                }
-
-// waving animation stays normal
-                if (assetName.equals("waving.glb")) {
-                    animationYOffset = 0f;
-                }
-
-                newNode.setWorldPosition(
-                        new Float3(
-                                currentPosition.getX(),
-                                currentPosition.getY() + animationYOffset,
-                                currentPosition.getZ()
-                        )
-                );
+                newNode.setWorldPosition(new Float3(
+                        AVATAR_X,
+                        cachedYPos + animationYOffset,
+                        AVATAR_Z
+                ));
 
                 sceneView.addChildNode(newNode);
-
-                sceneView.removeChildNode(oldNode);
-
+                if (oldNode != null) sceneView.removeChildNode(oldNode);
                 currentModelNode = newNode;
 
-                Log.d(TAG, "Animation scale fixed");
-
+                Log.d(TAG, "Animation loaded: " + assetName + " scale=" + s);
                 return;
             }
 
+            // avatar.glb — only re-frame if cachedScale not set yet
             sceneView.addChildNode(newNode);
-
-            if (oldNode != null) {
-                sceneView.removeChildNode(oldNode);
-            }
-
+            if (oldNode != null) sceneView.removeChildNode(oldNode);
             currentModelNode = newNode;
 
-            handler.postDelayed(
-                    () -> frameAvatar(newNode, assetName, 1),
-                    BOUNDS_READ_DELAY_MS
-            );
+            if (cachedScale <= 0) {
+                // First time only — measure and cache
+                handler.postDelayed(
+                        () -> frameAvatar(newNode, assetName, 1),
+                        BOUNDS_READ_DELAY_MS
+                );
+            } else {
+                // Already framed before — reuse cached values directly
+                newNode.setWorldScale(new Float3(cachedScale, cachedScale, cachedScale));
+                newNode.setWorldPosition(new Float3(AVATAR_X, cachedYPos, AVATAR_Z));
+                Log.d(TAG, "avatar.glb reloaded with cached scale=" + cachedScale);
+            }
 
         } catch (Exception e) {
             Log.e(TAG, "loadAvatarModel failed: " + e.getMessage());
         }
     }
+
     private void frameAvatar(ModelNode nodeRef, String assetName, int attempt) {
         if (nodeRef != currentModelNode || sceneView == null) return;
 
@@ -569,7 +552,7 @@ public class AvatarChatActivity extends AppCompatActivity implements TextToSpeec
             cachedScale = scale;
             cachedYPos = AVATAR_Y;
 
-            positionCamera();
+            positionCamera(90.2f); // ← only change, tune this value
 
             Log.d(TAG, "Avatar fixed at X=" + AVATAR_X +
                     " Y=" + AVATAR_Y +
@@ -589,18 +572,16 @@ public class AvatarChatActivity extends AppCompatActivity implements TextToSpeec
         }
     }
 
-    private void positionCamera() {
+
+    private void positionCamera(float distanceFactor) {
         if (sceneView == null || sceneView.getCameraNode() == null) return;
 
         float camY    = DESIRED_HEIGHT * CAMERA_HEIGHT_FACTOR;
-        float camZ    = DESIRED_HEIGHT * CAMERA_DISTANCE_FACTOR;
+        float camZ    = DESIRED_HEIGHT * distanceFactor;
         float lookAtY = DESIRED_HEIGHT * CAMERA_LOOKAT_FACTOR;
 
         sceneView.getCameraNode().setWorldPosition(new Float3(0f, camY, camZ));
 
-        // Positive X rotation = look up in right-handed OpenGL (Rx(θ)·[0,0,-1] = [0,sinθ,-cosθ]).
-        // lookAtY is above camY (face level > camera height) so deltaY > 0 → positive pitch → look up.
-        // The original code negated deltaY, which aimed thea camera at the floor instead of the face.
         float deltaY   = lookAtY - camY;
         float pitchDeg = (float) Math.toDegrees(Math.atan2(deltaY, camZ));
         sceneView.getCameraNode().setRotation(new Float3(pitchDeg, 0f, 0f));
@@ -630,7 +611,7 @@ public class AvatarChatActivity extends AppCompatActivity implements TextToSpeec
         cachedScale = 0.01f;
         cachedYPos = AVATAR_Y;
 
-        positionCamera();
+        positionCamera(CAMERA_DISTANCE_FACTOR);
 
         Log.d(TAG, "Fallback applied with fixed position");
     }
@@ -662,9 +643,7 @@ public class AvatarChatActivity extends AppCompatActivity implements TextToSpeec
         intent.putExtra(RecognizerIntent.EXTRA_PARTIAL_RESULTS, false);
 
         setAvatarState(AvatarState.LISTENING);
-        if (chatTabs.getSelectedTabPosition() == 1) {
-            subtitleView.setText("Listening...");
-        }
+        // Subtitle removed as requested
         speechRecognizer.startListening(intent);
     }
 
