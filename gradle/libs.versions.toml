@@ -18,6 +18,11 @@ ktorAndroid = "2.3.7"
 coroutinesAndroid = "1.8.1"
 sceneview = "2.0.3"
 recyclerview = "1.4.0"
+cameraXVersion = "1.3.4"
+tflite = "2.17.0"
+tfliteSupport = "0.4.4"
+faceDetection = "16.1.5"
+cameraCore = "1.6.1"
 
 [libraries]
 junit = { group = "junit", name = "junit", version.ref = "junit" }
@@ -42,6 +47,17 @@ kotlinx-serialization-json = { group = "org.jetbrains.kotlinx", name = "kotlinx-
 sceneview = { group = "io.github.sceneview", name = "sceneview", version.ref = "sceneview" }
 recyclerview = { group = "androidx.recyclerview", name = "recyclerview", version.ref = "recyclerview" }
 
+# CameraX
+camera-core = { group = "androidx.camera", name = "camera-core", version.ref = "cameraXVersion" }
+camera-camera2 = { group = "androidx.camera", name = "camera-camera2", version.ref = "cameraXVersion" }
+camera-lifecycle = { group = "androidx.camera", name = "camera-lifecycle", version.ref = "cameraXVersion" }
+camera-view = { group = "androidx.camera", name = "camera-view", version.ref = "cameraXVersion" }
+
+# TensorFlow Lite
+tflite = { group = "org.tensorflow", name = "tensorflow-lite", version.ref = "tflite" }
+tflite-support = { group = "org.tensorflow", name = "tensorflow-lite-support", version.ref = "tfliteSupport" }
+mlkit-face-detection = { group = "com.google.mlkit", name = "face-detection", version.ref = "faceDetection" }
+androidx-camera-core = { group = "androidx.camera", name = "camera-core", version.ref = "cameraCore" }
 [plugins]
 android-application = { id = "com.android.application", version.ref = "agp" }
 kotlin-android = { id = "org.jetbrains.kotlin.android", version.ref = "kotlin" }

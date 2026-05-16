@@ -1,6 +1,7 @@
 package com.saad.moviessaad.ui;
 
 import android.content.Intent;
+import android.content.SharedPreferences;
 import android.os.Bundle;
 import android.view.inputmethod.InputMethodManager;
 import android.content.Context;
@@ -45,6 +46,7 @@ public class MainActivity extends AppCompatActivity implements MovieAdapter.OnMo
     private ChipGroup categoryChipGroup;
     private ChipGroup topRatedChipGroup;
     private String userId;
+    private String userType;
 
     @Override
     protected void onCreate(Bundle savedInstanceState) {
@@ -56,6 +58,10 @@ public class MainActivity extends AppCompatActivity implements MovieAdapter.OnMo
             return;
         }
         userId = sessionManager.getCurrentUserId();
+        
+        SharedPreferences prefs = getSharedPreferences("app_prefs", MODE_PRIVATE);
+        userType = prefs.getString("user_type", "adult");
+
         setContentView(R.layout.activity_main);
         SystemBarInsets.applyToRootWithoutBottom(findViewById(android.R.id.content));
 
@@ -203,6 +209,11 @@ public class MainActivity extends AppCompatActivity implements MovieAdapter.OnMo
     }
 
     private void fetchNowPlayingMovies() {
+        if ("kid".equals(userType)) {
+            // Fetch animation/family movies for kids
+            fetchMoviesByGenre("Kids", 10751); 
+            return;
+        }
         progressBar.setVisibility(View.VISIBLE);
         apiService.getNowPlayingMovies(ApiConstants.API_KEY).enqueue(new Callback<MovieResponse>() {
             @Override

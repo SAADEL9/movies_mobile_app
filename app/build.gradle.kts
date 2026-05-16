@@ -55,6 +55,10 @@ android {
     kotlinOptions {
         jvmTarget = "11"
     }
+    // Prevent AAPT from compressing .tflite model so TFLite can load it from assets
+    androidResources {
+        noCompress += "tflite"
+    }
 }
 
 dependencies {
@@ -65,6 +69,7 @@ dependencies {
     implementation(libs.recyclerview)
     
     implementation(libs.glide)
+    implementation(libs.androidx.camera.core)
     annotationProcessor(libs.glide.compiler)
     implementation(libs.retrofit)
     implementation(libs.converter.gson)
@@ -77,6 +82,20 @@ dependencies {
     implementation(libs.coroutines.android)
     implementation(libs.kotlinx.serialization.json)
     implementation(libs.sceneview)
+
+    // CameraX
+    implementation(libs.camera.core)
+    implementation(libs.camera.camera2)
+    implementation(libs.camera.lifecycle)
+    implementation(libs.camera.view)
+
+    // TensorFlow Lite
+    implementation(libs.tflite)
+    implementation(libs.tflite.support) {
+        exclude(group = "org.tensorflow", module = "tensorflow-lite-api")
+    }
+    // ML Kit
+    implementation(libs.mlkit.face.detection)
 
     testImplementation(libs.junit)
     androidTestImplementation(libs.ext.junit)

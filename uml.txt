@@ -1,0 +1,111 @@
+@startuml MoviesSaad_Class_Diagram
+
+title MoviesSaad - Core Architecture (Simplified)
+
+package "UI Layer" {
+    class AgeScanActivity
+    class MainActivity
+    class MovieDetailActivity
+    class AvatarChatActivity
+    class ProfileActivity
+}
+
+package "Data Layer" {
+    object SupabaseService <<Singleton>>
+    object SupabaseClientProvider <<Singleton>>
+    class ApiClient
+    class MovieAiClient
+}
+
+package "API Services" {
+    interface ApiService <<TMDB>>
+    interface SupabaseDbService <<Database>>
+    interface OllamaApiService <<AI>>
+}
+
+package "Models" {
+    class Movie
+    class ProfileEntry
+    class WatchlistItem
+    class OllamaMessage
+}
+
+AgeScanActivity --> SupabaseService
+MainActivity --> ApiService
+MainActivity --> SupabaseService
+MovieDetailActivity --> ApiService
+MovieDetailActivity --> SupabaseDbService
+AvatarChatActivity --> MovieAiClient
+AvatarChatActivity --> OllamaMessage
+
+MovieAiClient --> OllamaApiService
+SupabaseService --> SupabaseClientProvider
+SupabaseService --> SupabaseDbService
+
+@enduml
+
+@startuml MoviesSaad_Sequence_Diagram
+
+title AI Chat Interaction (CineBot)
+
+actor User
+participant AvatarChatActivity
+participant MovieAiClient
+participant OllamaAPI
+participant OpenRouterAPI
+participant TTS_Engine
+
+User -> AvatarChatActivity: Send Message (Voice/Text)
+AvatarChatActivity -> MovieAiClient: chat(history)
+MovieAiClient -> OllamaAPI: POST /chat (Local LLM)
+
+alt Ollama Success
+    OllamaAPI --> MovieAiClient: Response
+else Ollama Failure
+    MovieAiClient -> OpenRouterAPI: POST /chat (Fallback)
+    OpenRouterAPI --> MovieAiClient: Response
+end
+
+MovieAiClient --> AvatarChatActivity: onSuccess(message)
+AvatarChatActivity -> TTS_Engine: speak(text)
+AvatarChatActivity -> AvatarChatActivity: Set Animation (TALKING)
+TTS_Engine --> User: Voice Output
+AvatarChatActivity -> User: UI Update (Chat Bubble)
+
+@enduml
+
+@startuml MoviesSaad_UseCase_Diagram
+
+title MoviesSaad - Use Case Diagram
+
+actor "User" as U
+actor "TMDB API" as TMDB
+actor "Supabase" as SB
+actor "AI Provider" as AI
+
+package "App Functionalities" {
+    usecase "Scan Age (Onboarding)" as UC1
+    usecase "Explore Movies" as UC2
+    usecase "Manage Watchlist" as UC3
+    usecase "Rate Movies" as UC4
+    usecase "Chat with CineBot" as UC5
+    usecase "Find Nearby Cinemas" as UC6
+    usecase "Update Profile" as UC7
+}
+
+U --> UC1
+U --> UC2
+U --> UC3
+U --> UC4
+U --> UC5
+U --> UC6
+U --> UC7
+
+UC1 ..> SB : Save User Type
+UC2 -- TMDB : Fetch Data
+UC3 -- SB : Sync
+UC4 -- SB : Store Rating
+UC5 -- AI : Process Natural Language
+UC7 -- SB : Update DB/Storage
+
+@enduml

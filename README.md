@@ -1,66 +1,50 @@
-# Movies Mobile App - Cinematic Experience with AI Avatar
+# MoviesSaad - 2026 Movie Assistant App
 
-Welcome to the **Movies Mobile App**, a premium Android application designed for movie enthusiasts who want a cinematic experience at their fingertips. This app goes beyond simple movie browsing by integrating a state-of-the-art **3D AI Avatar (CineBot)** that you can talk to!
+MoviesSaad is a next-generation Android application designed to provide a personalized and interactive movie discovery experience. Combining advanced AI, 3D visualization, and real-time movie data, it offers users a unique way to explore the world of cinema.
 
 ## 🚀 Key Features
 
-### 🎬 Movie Discovery & Details
-- **Dynamic Browsing**: Explore "Now Playing", "Top Rated" movies, and "Top Rated" series.
-- **Category Filtering**: Quickly filter movies by genres like Action, Romance, Comedy, Horror, Sci-Fi, and Animation.
-- **Deep Search**: Find any movie or series using the real-time search engine powered by the TMDB API.
-- **Rich Content**: View high-quality posters, backdrops, ratings, and detailed overviews for every title.
+### 1. 🛡️ Smart Age Scanning (Onboarding)
+- **AI-Powered Entry:** Before entering the app, users are scanned via the front camera.
+- **TFLite Face Analysis:** Uses a TensorFlow Lite model (upgraded to 2.17.0) to detect whether the user is a **Kid** or an **Adult**.
+- **Dynamic Content Filtering:** The app automatically adjusts its movie recommendations based on the detected age group (e.g., animation and family movies for kids).
 
-### 🤖 CineBot - Your AI Movie Assistant
-- **3D Animated Avatar**: Interact with a fully animated 3D avatar that waves and talks to you, built using **Google Filament** and **SceneView**.
-- **Voice Interaction**: Use your voice to ask questions about movies. The app features integrated **Speech Recognition** and **Text-to-Speech (TTS)**.
-- **Masculine Voice Profile**: Optimized with a deep, masculine voice for a premium persona.
-- **Dual AI Core**: Powered by **Ollama** (Llama 3.2) for local processing, with an automatic fallback to **OpenRouter** for cloud-based intelligence.
+### 2. 🤖 CineBot: 3D AI Assistant
+- **Interactive 3D Avatar:** Powered by **SceneView (Filament)**, a 3D avatar (CineBot) interacts with users through animations (waving, talking, listening).
+- **Voice & Chat Interaction:** Users can chat with CineBot via text or voice (Speech-to-Text). The bot responds with localized Text-to-Speech (TTS) using a deep male voice.
+- **Intelligent Movie Knowledge:** CineBot uses **Ollama** (local LLM) with a fallback to **OpenRouter** to answer questions about specific movies, genres, or trivia.
 
-### 👤 User Experience & Backend
-- **Secure Authentication**: User registration and login powered by **Supabase Auth**.
-- **Personalized Watchlist**: Save your favorite movies to a cloud-synced watchlist.
-- **Profile Management**: Customize your profile with a display name and avatar storage.
-- **Cinematic UI**: A stunning dark-mode interface with glassmorphism effects, smooth transitions, and a gold-accented premium color palette.
+### 3. 🎬 Comprehensive Movie Exploration
+- **TMDB Integration:** Fetches real-time movie data, including now playing, top-rated, and genre-specific titles from The Movie Database (TMDB).
+- **Detailed Insights:** View movie overviews, ratings, release dates, and full cast lists.
+- **Multimedia Experience:** Watch trailers directly via YouTube integration.
 
-## 🛠️ Technology Stack
+### 4. 📍 Cinema Discovery
+- **OpenStreetMap (OSMdroid):** View nearby cinemas on an interactive map.
+- **Location Awareness:** Uses GPS to center the map on the user's current location and highlights local theaters.
 
-| Category | Tools & Libraries |
-| :--- | :--- |
-| **Language** | Java |
-| **Framework** | Android SDK (Min API 24, Target API 36) |
-| **3D Engine** | Google Filament, SceneView |
-| **Networking** | Retrofit 2, OkHttp, GSON |
-| **Backend / DB** | Supabase (PostgreSQL, Storage, GoTrue) |
-| **AI Processing** | Ollama (Llama 3.2), OpenRouter API |
-| **Data Source** | TMDB API |
-| **UI / Design** | Material Design 3, Glide, ConstraintLayout |
-| **Audio** | Android TTS, SpeechRecognizer |
+### 5. 👤 Personalized Profiles & Watchlists
+- **Supabase Backend:** Secure authentication (Login/Register) and real-time database management via Supabase.
+- **Customizable Profiles:** Users can set their bio and upload custom avatars (stored in Supabase Storage).
+- **Personalized Lists:**
+    - **Watchlist:** Save movies you want to see later.
+    - **Watched History:** Mark movies as seen.
+    - **User Ratings:** Give movies your own star ratings (1-5 stars) and sync them to the cloud.
 
-## ⚙️ Setup & Configuration
+## 🛠️ Technical Stack
 
-To run this project, you need to configure the following in your `local.properties` file:
+- **Platform:** Android (Java/Kotlin)
+- **Backend:** Supabase (Auth, Postgrest, Storage)
+- **AI/ML:** TensorFlow Lite (Face Detection/Classification), ML Kit (Face Detection)
+- **3D Rendering:** SceneView (Filament) for .glb model rendering
+- **Networking:** Retrofit, Ktor, OkHttp
+- **Database/Storage:** TMDB API, Supabase Cloud
+- **Maps:** OSMdroid (OpenStreetMap)
+- **Architecture:** MVVM-inspired with Service-based data layers
 
-```properties
-# TMDB Configuration
-TMDB_API_KEY=your_tmdb_api_key
-TMDB_BASE_URL=https://api.themoviedb.org/3/
-TMDB_IMAGE_BASE_URL=https://image.tmdb.org/t/p/w500
+## 📦 Recent Updates
+- **Stability Upgrade:** Migrated Age Scanner to TFLite 2.17.0 to support modern `FULLY_CONNECTED` v12 operations.
+- **Performance Fixes:** Implemented a grace period for face scanning to prevent flickering and improved consecutive frame detection logic.
 
-# Supabase Configuration
-SUPABASE_URL=your_supabase_project_url
-SUPABASE_PUBLISHABLE_KEY=your_supabase_anon_key
-
-# AI Configuration
-# For physical devices, use your PC's local IP (e.g., 192.168.x.x)
-OLLAMA_BASE_URL=http://your_pc_ip:11434/
-OPENROUTER_API_KEY=your_openrouter_api_key
-OPENROUTER_BASE_URL=https://openrouter.ai/
-```
-
-### 💡 Connecting to Ollama from a Real Phone
-1. Find your PC's local IP address using `ipconfig`.
-2. Update `OLLAMA_BASE_URL` in `local.properties` with this IP.
-3. On your PC, set the environment variable `OLLAMA_HOST=0.0.0.0` and restart Ollama to allow external connections.
-
-## 📜 License
-This project is for educational and portfolio purposes.
+---
+*Created as a prototype for advanced AI integration in mobile applications.*
