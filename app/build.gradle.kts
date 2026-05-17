@@ -89,11 +89,6 @@ dependencies {
     implementation(libs.camera.lifecycle)
     implementation(libs.camera.view)
 
-    // TensorFlow Lite
-    implementation(libs.tflite)
-    implementation(libs.tflite.support) {
-        exclude(group = "org.tensorflow", module = "tensorflow-lite-api")
-    }
     // ML Kit
     implementation(libs.mlkit.face.detection)
 

@@ -22,12 +22,15 @@ import com.saad.moviessaad.adapter.MovieAdapter;
 import com.saad.moviessaad.api.ApiClient;
 import com.saad.moviessaad.api.ApiConstants;
 import com.saad.moviessaad.api.ApiService;
+import com.saad.moviessaad.data.KidFilter;
 import com.saad.moviessaad.data.SupabaseService;
 import com.saad.moviessaad.model.Movie;
 import com.saad.moviessaad.model.MovieResponse;
 import java.util.ArrayList;
+import java.util.Arrays;
 import java.util.List;
 import java.util.Locale;
+import java.util.Map;
 import retrofit2.Call;
 import retrofit2.Callback;
 import retrofit2.Response;
@@ -46,7 +49,7 @@ public class MainActivity extends AppCompatActivity implements MovieAdapter.OnMo
     private ChipGroup categoryChipGroup;
     private ChipGroup topRatedChipGroup;
     private String userId;
-    private String userType;
+    private boolean isKid;
 
     @Override
     protected void onCreate(Bundle savedInstanceState) {
@@ -58,9 +61,7 @@ public class MainActivity extends AppCompatActivity implements MovieAdapter.OnMo
             return;
         }
         userId = sessionManager.getCurrentUserId();
-        
-        SharedPreferences prefs = getSharedPreferences("app_prefs", MODE_PRIVATE);
-        userType = prefs.getString("user_type", "adult");
+        isKid = KidFilter.isKid(this);
 
         setContentView(R.layout.activity_main);
         SystemBarInsets.applyToRootWithoutBottom(findViewById(android.R.id.content));
@@ -205,20 +206,22 @@ public class MainActivity extends AppCompatActivity implements MovieAdapter.OnMo
     }
 
     private void fetchNowPlayingMovies() {
-        if ("kid".equals(userType)) {
-            // Fetch animation/family movies for kids
-            fetchMoviesByGenre("Kids", 10751); 
-            return;
-        }
         progressBar.setVisibility(View.VISIBLE);
-        apiService.getNowPlayingMovies(ApiConstants.API_KEY).enqueue(new Callback<MovieResponse>() {
+        Call<MovieResponse> call;
+        if (isKid) {
+            call = apiService.discoverMovies(ApiConstants.API_KEY, KidFilter.getKidQueryParams());
+        } else {
+            call = apiService.getNowPlayingMovies(ApiConstants.API_KEY);
+        }
+
+        call.enqueue(new Callback<MovieResponse>() {
             @Override
             public void onResponse(Call<MovieResponse> call, Response<MovieResponse> response) {
                 progressBar.setVisibility(View.GONE);
                 if (response.isSuccessful() && response.body() != null) {
                     movieList = normalizedResults(response.body().getResults(), "movie");
                     adapter.setMovieList(movieList);
-                    toolbar.setSubtitle("Let's find something great to watch.");
+                    toolbar.setSubtitle(isKid ? "Recommended for you" : "Let's find something great to watch.");
                 } else {
                     showError("Error while fetching movies");
                 }
@@ -234,7 +237,16 @@ public class MainActivity extends AppCompatActivity implements MovieAdapter.OnMo
 
     private void fetchMoviesByGenre(String genreName, int genreId) {
         progressBar.setVisibility(View.VISIBLE);
-        apiService.discoverMoviesByGenre(ApiConstants.API_KEY, genreId, "popularity.desc").enqueue(new Callback<MovieResponse>() {
+        Call<MovieResponse> call;
+        if (isKid) {
+            Map<String, String> params = KidFilter.getKidQueryParams();
+            params.put("with_genres", String.valueOf(genreId));
+            call = apiService.discoverMovies(ApiConstants.API_KEY, params);
+        } else {
+            call = apiService.discoverMoviesByGenre(ApiConstants.API_KEY, genreId, "popularity.desc");
+        }
+
+        call.enqueue(new Callback<MovieResponse>() {
             @Override
             public void onResponse(Call<MovieResponse> call, Response<MovieResponse> response) {
                 progressBar.setVisibility(View.GONE);
@@ -256,11 +268,21 @@ public class MainActivity extends AppCompatActivity implements MovieAdapter.OnMo
     }
 
     private void fetchTopRatedMovies() {
-        fetchRankedList(apiService.getTopRatedMovies(ApiConstants.API_KEY), "movie", "Best movies by rating");
+        if (isKid) {
+            Map<String, String> params = KidFilter.getKidQueryParams();
+            params.put("sort_by", "vote_average.desc");
+            fetchRankedList(apiService.discoverMovies(ApiConstants.API_KEY, params), "movie", "Best movies for kids");
+        } else {
+            fetchRankedList(apiService.getTopRatedMovies(ApiConstants.API_KEY), "movie", "Best movies by rating");
+        }
     }
 
     private void fetchTopRatedSeries() {
-        fetchRankedList(apiService.getTopRatedSeries(ApiConstants.API_KEY), "tv", "Best series by rating");
+        if (isKid) {
+            fetchTopRatedMovies();
+        } else {
+            fetchRankedList(apiService.getTopRatedSeries(ApiConstants.API_KEY), "tv", "Best series by rating");
+        }
     }
 
     private void fetchRankedList(Call<MovieResponse> call, String mediaType, String subtitle) {
@@ -270,7 +292,11 @@ public class MainActivity extends AppCompatActivity implements MovieAdapter.OnMo
             public void onResponse(Call<MovieResponse> call, Response<MovieResponse> response) {
                 progressBar.setVisibility(View.GONE);
                 if (response.isSuccessful() && response.body() != null) {
-                    movieList = normalizedResults(response.body().getResults(), mediaType);
+                    List<Movie> results = response.body().getResults();
+                    if (isKid) {
+                        results = filterResultsForKids(results);
+                    }
+                    movieList = normalizedResults(results, mediaType);
                     adapter.setMovieList(movieList);
                     toolbar.setSubtitle(subtitle);
                 } else {
@@ -298,11 +324,15 @@ public class MainActivity extends AppCompatActivity implements MovieAdapter.OnMo
     }
 
     private void searchMovies(String query) {
-        apiService.searchMovies(ApiConstants.API_KEY, query).enqueue(new Callback<MovieResponse>() {
+        apiService.searchMovies(ApiConstants.API_KEY, query, !isKid).enqueue(new Callback<MovieResponse>() {
             @Override
             public void onResponse(Call<MovieResponse> call, Response<MovieResponse> response) {
                 if (response.isSuccessful() && response.body() != null) {
-                    adapter.setMovieList(normalizedResults(response.body().getResults(), "movie"));
+                    List<Movie> results = response.body().getResults();
+                    if (isKid) {
+                        results = filterResultsForKids(results);
+                    }
+                    adapter.setMovieList(normalizedResults(results, "movie"));
                     toolbar.setSubtitle("Search results for \"" + query + "\"");
                 }
             }
@@ -311,6 +341,23 @@ public class MainActivity extends AppCompatActivity implements MovieAdapter.OnMo
             public void onFailure(Call<MovieResponse> call, Throwable t) {
             }
         });
+    }
+
+    private List<Movie> filterResultsForKids(List<Movie> results) {
+        if (results == null) return new ArrayList<>();
+        List<Movie> filtered = new ArrayList<>();
+        List<Integer> kidsGenres = Arrays.asList(16, 10751, 12, 35);
+        for (Movie movie : results) {
+            if (movie.getGenreIds() != null) {
+                for (Integer id : movie.getGenreIds()) {
+                    if (kidsGenres.contains(id)) {
+                        filtered.add(movie);
+                        break;
+                    }
+                }
+            }
+        }
+        return filtered;
     }
 
     private List<Movie> normalizedResults(List<Movie> results, String mediaType) {

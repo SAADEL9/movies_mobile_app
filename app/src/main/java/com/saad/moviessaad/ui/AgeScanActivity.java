@@ -1,13 +1,11 @@
 package com.saad.moviessaad.ui;
 
-import static androidx.core.content.ContextCompat.startActivity;
-
 import android.Manifest;
 import android.annotation.SuppressLint;
 import android.content.Intent;
 import android.content.SharedPreferences;
 import android.content.pm.PackageManager;
-import android.graphics.Bitmap;
+import android.graphics.Rect;
 import android.os.Bundle;
 import android.util.Log;
 import android.util.Size;
@@ -29,18 +27,14 @@ import androidx.core.content.ContextCompat;
 
 import com.google.common.util.concurrent.ListenableFuture;
 import com.google.mlkit.vision.common.InputImage;
+import com.google.mlkit.vision.face.Face;
 import com.google.mlkit.vision.face.FaceDetection;
 import com.google.mlkit.vision.face.FaceDetector;
 import com.google.mlkit.vision.face.FaceDetectorOptions;
+import com.google.mlkit.vision.face.FaceLandmark;
 import com.saad.moviessaad.R;
 
-import org.tensorflow.lite.Interpreter;
-import org.tensorflow.lite.support.common.FileUtil;
-
-import java.io.IOException;
-import java.nio.ByteBuffer;
-import java.nio.ByteOrder;
-import java.nio.MappedByteBuffer;
+import java.util.List;
 import java.util.concurrent.ExecutionException;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
@@ -58,14 +52,17 @@ public class AgeScanActivity extends AppCompatActivity {
     private TextView tvConfidence;
     private Button btnConfirm;
     
-    private Interpreter tflite;
     private FaceDetector faceDetector;
     private ExecutorService cameraExecutor;
     private String detectedType = "";
     private boolean isThresholdMet = false;
     private boolean resultLocked = false;
-    private long cameraStartTime = 0;
-    private static final long WARMUP_MS = 2000;
+    
+    private int consecutiveCount = 0;
+    private int noFaceCount = 0;
+    private String lastType = "";
+    private static final int REQUIRED_CONSECUTIVE = 5;
+    private static final int MAX_NO_FACE_FRAMES = 5;
 
     @Override
     protected void onCreate(Bundle savedInstanceState) {
@@ -81,39 +78,22 @@ public class AgeScanActivity extends AppCompatActivity {
         setContentView(R.layout.activity_age_scan);
         SystemBarInsets.applyToRoot(findViewById(android.R.id.content));
 
-        // Reset state for a fresh start
-        detectedType = "";
-        isThresholdMet = false;
-        resultLocked = false;
-        cameraStartTime = 0;
-        consecutiveCount = 0;
-        lastType = "";
-
         previewView = findViewById(R.id.preview_view);
         tvResult = findViewById(R.id.tv_result);
         tvConfidence = findViewById(R.id.tv_confidence);
         btnConfirm = findViewById(R.id.btn_confirm);
         
-        // Ensure confirm button is hidden on start
         btnConfirm.setVisibility(View.GONE);
-
         cameraExecutor = Executors.newSingleThreadExecutor();
 
-        // Initialize Face Detector
+        // Initialize ML Kit Face Detector
         FaceDetectorOptions options = new FaceDetectorOptions.Builder()
                 .setPerformanceMode(FaceDetectorOptions.PERFORMANCE_MODE_FAST)
+                .setLandmarkMode(FaceDetectorOptions.LANDMARK_MODE_ALL)
+                .setClassificationMode(FaceDetectorOptions.CLASSIFICATION_MODE_ALL)
+                .setContourMode(FaceDetectorOptions.CONTOUR_MODE_ALL)
                 .build();
         faceDetector = FaceDetection.getClient(options);
-
-        try {
-            MappedByteBuffer tfliteModel = FileUtil.loadMappedFile(this, "model.tflite");
-            Interpreter.Options tfliteOptions = new Interpreter.Options();
-            tfliteOptions.setNumThreads(4); 
-            tflite = new Interpreter(tfliteModel, tfliteOptions);
-        } catch (Exception e) {
-            Log.e(TAG, "Error loading TFLite model", e);
-            Toast.makeText(this, "Model load failed", Toast.LENGTH_SHORT).show();
-        }
 
         if (allPermissionsGranted()) {
             startCamera();
@@ -147,7 +127,7 @@ public class AgeScanActivity extends AppCompatActivity {
                 preview.setSurfaceProvider(previewView.getSurfaceProvider());
 
                 ImageAnalysis imageAnalysis = new ImageAnalysis.Builder()
-                        .setTargetResolution(new Size(224, 224))
+                        .setTargetResolution(new Size(1280, 720))
                         .setBackpressureStrategy(ImageAnalysis.STRATEGY_KEEP_ONLY_LATEST)
                         .build();
 
@@ -159,7 +139,6 @@ public class AgeScanActivity extends AppCompatActivity {
 
                 cameraProvider.unbindAll();
                 cameraProvider.bindToLifecycle(this, cameraSelector, preview, imageAnalysis);
-                cameraStartTime = System.currentTimeMillis();
 
             } catch (ExecutionException | InterruptedException e) {
                 Log.e(TAG, "Use case binding failed", e);
@@ -167,20 +146,9 @@ public class AgeScanActivity extends AppCompatActivity {
         }, ContextCompat.getMainExecutor(this));
     }
 
-    private int consecutiveCount = 0;
-    private int noFaceCount = 0;
-    private String lastType = "";
-    private static final int REQUIRED_CONSECUTIVE = 5;
-    private static final int MAX_NO_FACE_FRAMES = 5;
-
     @SuppressLint("UnsafeOptInUsageError")
     private void analyzeImage(@NonNull ImageProxy imageProxy) {
-        if (tflite == null || faceDetector == null || resultLocked) {
-            imageProxy.close();
-            return;
-        }
-
-        if (System.currentTimeMillis() - cameraStartTime < WARMUP_MS) {
+        if (faceDetector == null || resultLocked) {
             imageProxy.close();
             return;
         }
@@ -197,7 +165,6 @@ public class AgeScanActivity extends AppCompatActivity {
 
         faceDetector.process(inputImage)
                 .addOnSuccessListener(faces -> {
-                    Log.d(TAG, "Faces detected: " + faces.size());
                     if (faces.isEmpty()) {
                         noFaceCount++;
                         if (noFaceCount >= MAX_NO_FACE_FRAMES) {
@@ -207,68 +174,78 @@ public class AgeScanActivity extends AppCompatActivity {
                                 consecutiveCount = 0;
                             });
                         }
-                        imageProxy.close();
                     } else {
                         noFaceCount = 0;
-                        // ✅ get bitmap on MAIN thread first, then inference on background
-                        runOnUiThread(() -> {
-                            Bitmap bitmap = previewView.getBitmap();
-                            if (bitmap == null) {
-                                imageProxy.close();
-                                return;
-                            }
-                            // ✅ copy bitmap before passing to background thread
-                            Bitmap bitmapCopy = bitmap.copy(bitmap.getConfig(), false);
-                            cameraExecutor.execute(() -> runTfliteInference(imageProxy, bitmapCopy));
-                        });
+                        estimateAge(faces.get(0));
                     }
                 })
-                .addOnFailureListener(e -> {
-                    Log.e(TAG, "Face detection failed", e);
-                    imageProxy.close();
-                });
+                .addOnFailureListener(e -> Log.e(TAG, "Face detection failed", e))
+                .addOnCompleteListener(task -> imageProxy.close());
     }
 
-    private void runTfliteInference(@NonNull ImageProxy imageProxy, Bitmap bitmap) {
-        try {
-            Bitmap resizedBitmap = Bitmap.createScaledBitmap(bitmap, 224, 224, true);
+    private void estimateAge(Face face) {
+        // ML Kit doesn't provide age directly. We use multi-point facial biometrics.
+        // 1. Children have a relatively shorter mid-face (eye-to-mouth).
+        // 2. Children's eyes appear wider apart relative to their face width.
+        // 3. Children typically have rounder faces (width/height ratio closer to 1.0).
+        
+        Rect bounds = face.getBoundingBox();
+        float faceHeight = (float) bounds.height();
+        float faceWidth  = (float) bounds.width();
+        
+        FaceLandmark leftEye  = face.getLandmark(FaceLandmark.LEFT_EYE);
+        FaceLandmark rightEye = face.getLandmark(FaceLandmark.RIGHT_EYE);
+        FaceLandmark mouth    = face.getLandmark(FaceLandmark.MOUTH_BOTTOM);
+        
+        if (leftEye == null || rightEye == null || mouth == null) return;
+        
+        float eyeY = (leftEye.getPosition().y + rightEye.getPosition().y) / 2.0f;
+        float eyeToMouthDist = mouth.getPosition().y - eyeY;
+        float eyeDist = Math.abs(rightEye.getPosition().x - leftEye.getPosition().x);
+        
+        // Ratio A: Mid-face length relative to total face height
+        // Adult average: ~0.45-0.50 | Kid average: ~0.35-0.42
+        float midFaceRatio = eyeToMouthDist / faceHeight;
+        
+        // Ratio B: Eye spacing relative to face width
+        // Kids often have wider set eyes relative to face width: ~0.45+
+        float eyeSpacingRatio = eyeDist / faceWidth;
+        
+        // Ratio C: Face Aspect (Roundness)
+        // Kids: > 0.85 (rounder) | Adults: < 0.80 (longer)
+        float roundness = faceWidth / faceHeight;
 
-            ByteBuffer inputBuffer = ByteBuffer.allocateDirect(1 * 224 * 224 * 3 * 4);
-            inputBuffer.order(ByteOrder.nativeOrder());
+        Log.d(TAG, String.format("Biometrics - Midface: %.3f, Spacing: %.3f, Roundness: %.3f", 
+                midFaceRatio, eyeSpacingRatio, roundness));
 
-            int[] intValues = new int[224 * 224];
-            resizedBitmap.getPixels(intValues, 0, resizedBitmap.getWidth(), 0, 0,
-                    resizedBitmap.getWidth(), resizedBitmap.getHeight());
+        // Scoring System (higher = more likely a kid)
+        float kidScore = 0;
+        
+        // Midface check (Strongest signal)
+        if (midFaceRatio < 0.44f) kidScore += 2.0f;
+        if (midFaceRatio < 0.38f) kidScore += 1.0f; // extra bonus for very short faces
+        
+        // Eye spacing check
+        if (eyeSpacingRatio > 0.44f) kidScore += 1.0f;
+        
+        // Roundness check
+        if (roundness > 0.88f) kidScore += 1.0f;
 
-            for (int pixelValue : intValues) {
-                inputBuffer.putFloat(((pixelValue >> 16) & 0xFF) / 255.0f);
-                inputBuffer.putFloat(((pixelValue >> 8)  & 0xFF) / 255.0f);
-                inputBuffer.putFloat(( pixelValue        & 0xFF) / 255.0f);
-            }
-
-            // ✅ 2 classes only
-            float[][] output = new float[1][2];
-            tflite.run(inputBuffer, output);
-
-            float kidScore   = output[0][0]; // Kid   = index 0
-            float adultScore = output[0][1]; // adult = index 1
-
-            Log.d(TAG, "Kid: " + kidScore + " Adult: " + adultScore);
-            Log.d(TAG, "consecutiveCount: " + consecutiveCount + " lastType: " + lastType);
-
-            runOnUiThread(() -> {
-                if (kidScore > adultScore) {
-                    updateUI("Kid", kidScore);
-                } else {
-                    updateUI("Adult", adultScore);
-                }
-            });
-
-        } catch (Exception e) {
-            Log.e(TAG, "Inference error", e);
-        } finally {
-            imageProxy.close();
+        String type;
+        float confidence;
+        
+        // Threshold: 2.5 out of 5.0 points to be a Kid
+        if (kidScore >= 2.5f) {
+            type = "Kid";
+            // Map score to 70% - 95% range
+            confidence = Math.min(0.95f, 0.70f + (kidScore - 2.5f) * 0.1f);
+        } else {
+            type = "Adult";
+            // Map score to 70% - 95% range
+            confidence = Math.min(0.95f, 0.70f + (2.5f - kidScore) * 0.1f);
         }
+        
+        runOnUiThread(() -> updateUI(type, confidence));
     }
 
     private void updateUI(String type, float confidence) {
@@ -327,9 +304,6 @@ public class AgeScanActivity extends AppCompatActivity {
         super.onDestroy();
         if (cameraExecutor != null) {
             cameraExecutor.shutdown();
-        }
-        if (tflite != null) {
-            tflite.close();
         }
         if (faceDetector != null) {
             faceDetector.close();

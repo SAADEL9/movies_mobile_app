@@ -7,6 +7,7 @@ import retrofit2.Call;
 import retrofit2.http.GET;
 import retrofit2.http.Path;
 import retrofit2.http.Query;
+import retrofit2.http.QueryMap;
 
 /**
  * Interface définissant les points de terminaison de l'API TMDB
@@ -37,10 +38,22 @@ public interface ApiService {
      * Recherche des films par nom
      * @param apiKey Clé API TMDB
      * @param query Terme de recherche
+     * @param includeAdult Exclure ou inclure le contenu adulte
      * @return Appel Retrofit vers MovieResponse
      */
     @GET("search/movie")
-    Call<MovieResponse> searchMovies(@Query("api_key") String apiKey, @Query("query") String query);
+    Call<MovieResponse> searchMovies(
+            @Query("api_key") String apiKey,
+            @Query("query") String query,
+            @Query("include_adult") boolean includeAdult);
+
+    /**
+     * Découverte de films avec filtres dynamiques
+     */
+    @GET("discover/movie")
+    Call<MovieResponse> discoverMovies(
+            @Query("api_key") String apiKey,
+            @QueryMap java.util.Map<String, String> options);
 
     /**
      * Récupère les vidéos (bandes-annonces) d'un film spécifique

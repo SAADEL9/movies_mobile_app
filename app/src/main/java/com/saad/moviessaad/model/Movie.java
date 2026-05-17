@@ -37,6 +37,9 @@ public class Movie implements Serializable {
     @SerializedName("media_type")
     private String mediaType;
 
+    @SerializedName("genre_ids")
+    private java.util.List<Integer> genreIds;
+
     public Movie(int id, String title, String posterPath, String backdropPath, String overview, String releaseDate, double voteAverage) {
         this.id = id;
         this.title = title;
@@ -56,4 +59,5 @@ public class Movie implements Serializable {
     public double getVoteAverage() { return voteAverage; }
     public String getMediaType() { return mediaType != null ? mediaType : "movie"; }
     public void setMediaType(String mediaType) { this.mediaType = mediaType; }
+    public java.util.List<Integer> getGenreIds() { return genreIds; }
 }

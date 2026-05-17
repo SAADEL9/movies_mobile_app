@@ -42,6 +42,7 @@ import com.google.android.material.tabs.TabLayout;
 import com.saad.moviessaad.R;
 import com.saad.moviessaad.api.MovieAiClient;
 import com.saad.moviessaad.api.OllamaMessage;
+import com.saad.moviessaad.data.KidFilter;
 import com.saad.moviessaad.model.ChatMessage;
 import java.util.ArrayList;
 import java.util.List;
@@ -299,6 +300,9 @@ public class AvatarChatActivity extends AppCompatActivity implements TextToSpeec
         mode = intent.getStringExtra("mode");
         if (mode == null) mode = "general";
 
+        boolean isKid = KidFilter.isKid(this);
+        String kidInstruction = isKid ? " IMPORTANT: The user is a CHILD. ONLY recommend movies rated G or PG, and focus strictly on Animation, Family, Adventure, or Comedy genres. NEVER suggest R-rated, horror, or adult content." : "";
+
         if ("movie".equals(mode)) {
             String title    = safeValue(intent.getStringExtra("movie_title"),    "this movie");
             String overview = safeValue(intent.getStringExtra("movie_overview"), "No overview available.");
@@ -309,12 +313,12 @@ public class AvatarChatActivity extends AppCompatActivity implements TextToSpeec
             conversationHistory.add(new OllamaMessage("system",
                     "You are CineBot. The user is viewing '" + title + "' (" + year + "), rated "
                             + rating + "/10. Overview: " + overview
-                            + ". Keep ALL responses under 3 sentences. Be enthusiastic."));
+                            + ". Keep ALL responses under 3 sentences. Be enthusiastic." + kidInstruction));
         } else {
             introText = "Hey! I am CineBot, your personal movie assistant. Ask me anything about movies!";
             conversationHistory.add(new OllamaMessage("system",
                     "You are CineBot, a friendly movie expert inside a movies app. "
-                            + "Keep ALL responses under 3 sentences. Be fun and conversational."));
+                            + "Keep ALL responses under 3 sentences. Be fun and conversational." + kidInstruction));
         }
         subtitleView.setText(introText);
     }

@@ -14,6 +14,7 @@ import com.google.android.material.chip.ChipGroup;
 import com.saad.moviessaad.R;
 import com.saad.moviessaad.api.MovieAiClient;
 import com.saad.moviessaad.api.OllamaMessage;
+import com.saad.moviessaad.data.KidFilter;
 import com.saad.moviessaad.model.ChatMessage;
 import java.util.ArrayList;
 import java.util.List;
@@ -63,6 +64,9 @@ public class ChatActivity extends AppCompatActivity {
         String systemPrompt;
         String[] suggestions;
 
+        boolean isKid = KidFilter.isKid(this);
+        String kidInstruction = isKid ? " IMPORTANT: The user is a CHILD. ONLY recommend movies rated G or PG, and focus strictly on Animation, Family, Adventure, or Comedy genres. NEVER suggest R-rated, horror, or adult content." : "";
+
         if ("movie".equals(mode)) {
             String title = getIntent().getStringExtra("movie_title");
             String overview = getIntent().getStringExtra("movie_overview");
@@ -72,13 +76,13 @@ public class ChatActivity extends AppCompatActivity {
             getSupportActionBar().setTitle("Movie Chat");
             getSupportActionBar().setSubtitle(title);
 
-            systemPrompt = String.format("You are a movie expert assistant. The user is currently viewing the movie '%s' (%s), rated %s/10. Overview: %s. Answer questions about this movie, recommend similar movies, discuss themes, cast, and trivia.",
+            systemPrompt = String.format("You are a movie expert assistant. The user is currently viewing the movie '%s' (%s), rated %s/10. Overview: %s. Answer questions about this movie, recommend similar movies, discuss themes, cast, and trivia." + kidInstruction,
                     title, year, rating, overview);
             
             suggestions = new String[]{"Who directed this?", "Similar movies?", "Tell me about the cast"};
         } else {
             getSupportActionBar().setTitle("Movie Assistant");
-            systemPrompt = "You are a movie expert. Help the user discover, discuss, and learn about any movie, actor, or director.";
+            systemPrompt = "You are a movie expert. Help the user discover, discuss, and learn about any movie, actor, or director." + kidInstruction;
             suggestions = new String[]{"🎬 Recommend a thriller", "⭐ Best movies of 2024", "🎭 Movies like Inception"};
         }
 
