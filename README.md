@@ -6,7 +6,7 @@ MoviesSaad is a next-generation Android application designed to provide a person
 
 ### 1. 🛡️ Smart Age Scanning (Onboarding)
 - **AI-Powered Entry:** Before entering the app, users are scanned via the front camera.
-- **TFLite Face Analysis:** Uses a TensorFlow Lite model (upgraded to 2.17.0) to detect whether the user is a **Kid** or an **Adult**.
+- **TFLite Face Analysis:** Uses a TensorFlow Lite model (version 2.16.1) to detect whether the user is a **Kid** or an **Adult**.
 - **Dynamic Content Filtering:** The app automatically adjusts its movie recommendations based on the detected age group (e.g., animation and family movies for kids).
 
 ### 2. 🤖 CineBot: 3D AI Assistant
@@ -33,17 +33,17 @@ MoviesSaad is a next-generation Android application designed to provide a person
 
 ## 🛠️ Technical Stack
 
-- **Platform:** Android (Java/Kotlin)
-- **Backend:** Supabase (Auth, Postgrest, Storage)
-- **AI/ML:** TensorFlow Lite (Face Detection/Classification), ML Kit (Face Detection)
-- **3D Rendering:** SceneView (Filament) for .glb model rendering
-- **Networking:** Retrofit, Ktor, OkHttp
-- **Database/Storage:** TMDB API, Supabase Cloud
-- **Maps:** OSMdroid (OpenStreetMap)
-- **Architecture:** MVVM-inspired with Service-based data layers
+- **Platform:** Android (Java & Kotlin)
+- **Backend & Database:** Supabase (Auth, DB, Storage)
+- **AI & ML:** TensorFlow Lite, ML Kit, Ollama/OpenRouter
+- **3D Graphics:** SceneView (Avatar rendering)
+- **Movie Data:** TMDB API (The Movie Database)
+- **Images:** Glide (Posters & Avatars)
+- **Maps:** OSMdroid (Cinema Discovery)
+- **Architecture:** MVVM with Service-based data layers
 
 ## 📦 Recent Updates
-- **Stability Upgrade:** Migrated Age Scanner to TFLite 2.17.0 to support modern `FULLY_CONNECTED` v12 operations.
+- **Stability Fix:** Optimized Age Scanner dependencies by using TFLite 2.16.1 to resolve class duplication conflicts while maintaining support for required model operations.
 - **Performance Fixes:** Implemented a grace period for face scanning to prevent flickering and improved consecutive frame detection logic.
 
 ---

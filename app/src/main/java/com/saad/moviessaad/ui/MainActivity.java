@@ -129,10 +129,6 @@ public class MainActivity extends AppCompatActivity implements MovieAdapter.OnMo
             intent.putExtra("mode", "general");
             startActivity(intent);
         });
-
-        // Full-screen 3D avatar display (no chat UI)
-        findViewById(R.id.fab_avatar_display).setOnClickListener(v ->
-                startActivity(new Intent(this, AvatarDisplayActivity.class)));
     }
 
     private void setupDiscoveryControls() {
